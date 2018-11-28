@@ -63,7 +63,7 @@ class Seq2SeqReconstructor:
 
             #reshape encoder_states(insert dimension)
             encoder_states = tf.expand_dims(encoder_states,axis=2) # [batch_size, attn_len,1,attn_size]
-            # attention formulation:  v^T tanh(W_h h_i + W_s s_t + b_attn) # all of their vetor size: 128
+            # attention formulation:  v^T tanh(W_h h_i + W_s s_t + b_attn) # all of their vector size: 128
             attention_vec_size = attn_size
             # apply W_h to every encoder state
             W_h = variable_scope.get_variable('W_h',[1,1,attn_size, attention_vec_size]) 
@@ -159,8 +159,6 @@ class Seq2SeqReconstructor:
                     tf.get_variable_scope().reuse_variables()
                 vocab_scores.append(tf.nn.xw_plus_b(output, w, v))  # apply the linear layer
             vocab_dists = [tf.nn.softmax(s) for s in vocab_scores]
-
-            # final_dists list in shape (batch_size, extended_vsize)
             vocab_dists = vocab_dists[0]
             probs, ids = tf.nn.top_k(vocab_dists, batch_size * 2)  # take the k largest probs.
             self._topk_log_probs = tf.log(topk_probs)
