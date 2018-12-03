@@ -8,12 +8,7 @@ output: short text (integer sequence)
 2) https://github.com/hccho2/RNN-Tutorial
 """
 import tensorflow as tf
-from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import control_flow_ops
-from tensorflow.python.framework import dtypes
-from tensorflow.python.framework import ops
-from tensorflow.python.util import nest
+from models.utils import CustomGreedyEmbeddingHelper
 
 
 MAX_LEN = 1000
@@ -26,12 +21,11 @@ class Seq2SeqGenerator:
         self.enc_units = enc_units
         self.dec_units = dec_units
         self.batch_size = batch_size
-        self.output_max_length = 100
+        self.output_max_length = 300
         self._tokenID_start = 0
         self._tokenID_end = 1
 
     def build_model(self):
-        top_scope = tf.get_variable_scope()
         train_inputs = tf.placeholder(tf.float32, shape=[self.batch_size, MAX_LEN, self.vocab_size])
         # input_lengths = tf.reduce_sum(tf.to_int32(tf.not_equal(train_inputs, 1)), -1)
         input_lengths = tf.placeholder(tf.int32, shape=[self.batch_size, ])
@@ -83,9 +77,10 @@ class Seq2SeqGenerator:
             decoder_initial_state = decoder_cell.zero_state(self.batch_size, tf.float32).clone(cell_state=encoder_states)
 
             # <helper>
-            pred_helper = tf.contrib.seq2seq.CustomHelper(self._initializer,
-                                                          self._sampler,
-                                                          self._next_inputs)
+            embeddings = lambda x: self.embeddings(x, self.emb_scope, reuse=True)
+            pred_helper = CustomGreedyEmbeddingHelper(embedding=embeddings,
+                                                      start_tokens=self.start_tokens,
+                                                      end_token=self._tokenID_end)
 
             # <projection layer>
             projection_layer = tf.layers.Dense(self.vocab_size, use_bias=False)
@@ -98,31 +93,6 @@ class Seq2SeqGenerator:
         print("done!")
         return outputs
 
-    def _initializer(self, name=None):
-        finished = array_ops.tile([False], [self.batch_size])
-        return finished, self.start_tokens
-
-    def _sampler(self, time, outputs, state, name=None):
-        """sample for GreedyEmbeddingHelper."""
-        del time, state  # unused by sample_fn
-        # Outputs are logits, use argmax to get the most probable id
-        if not isinstance(outputs, ops.Tensor):
-          raise TypeError("Expected outputs to be a single Tensor, got: %s" %
-                          type(outputs))
-        sample_ids = math_ops.argmax(outputs, axis=-1, output_type=dtypes.int32)
-        return sample_ids
-
-    def _next_inputs(self, time, outputs, state, sample_ids, name=None):
-        """next_inputs_fn for GreedyEmbeddingHelper."""
-        del time  # unused by next_inputs_fn
-        finished = math_ops.equal(sample_ids, self._tokenID_end)
-        all_finished = math_ops.reduce_all(finished)
-        next_inputs = control_flow_ops.cond(
-            all_finished,
-            # If we're finished, the next_inputs value doesn't matter
-            lambda: self.embeddings(self.start_tokens, self.emb_scope, reuse=True),
-            lambda: self.embeddings(outputs, self.emb_scope, reuse=True))
-        return finished, next_inputs, state
 
 
 if __name__ == '__main__':
@@ -137,7 +107,13 @@ if __name__ == '__main__':
                              batch_size=32)
     outputs = model.build_model()
     # output specification
-    outputs[0].rnn_output  # logit
-    outputs[0].sample_id  # token id
+    # logit (batch, time step, vocab size)
+    outputs[0].rnn_output
+    # <tf.Tensor 'decode/decoder/transpose:0' shape=(32, ?, 100) dtype=float32>
+
+    # token id
+    outputs[0].sample_id
+
+    # states & etc...
     outputs[1]
     outputs[2]
