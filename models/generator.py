@@ -9,32 +9,30 @@ output: short text (integer sequence)
 """
 import tensorflow as tf
 from models.utils import CustomGreedyEmbeddingHelper
-
-
-MAX_TEXT_LEN = 1000
+from train import hyperparameter as H
 
 
 class Seq2SeqGenerator:
-    def __init__(self, vocab_size, embedding_units, enc_units, dec_units, batch_size):
+    def __init__(self, emb_scope, namescope, vocab_size,
+                 embedding_units, enc_units, dec_units, batch_size):
+        self.emb_scope = emb_scope
         self.vocab_size = vocab_size
         self.embedding_units = embedding_units
         self.enc_units = enc_units
         self.dec_units = dec_units
         self.batch_size = batch_size
-        self.max_output_length = 300
+        self.max_output_length = H.max_summary_len
         self._tokenID_start = 0
         self._tokenID_end = 1
+        self.namescope = namescope
 
-    def build_model(self):
-        with tf.variable_scope('generator'):
-            train_inputs = tf.placeholder(tf.float32, name='G_input',
-                                          shape=[self.batch_size, MAX_TEXT_LEN, self.vocab_size])
-            input_lengths = tf.placeholder(tf.int32, name='G_input_length', shape=[self.batch_size, ])
+    def build_model(self, train_inputs, input_lengths, reuse=False):
+        with tf.variable_scope(self.namescope, reuse=reuse):
             self.start_tokens = tf.one_hot(tf.fill([self.batch_size, ], self._tokenID_start),
                                            self.vocab_size)
             # embedding
-            self.emb_scope = tf.get_variable_scope()
             embed = self.embeddings(train_inputs, self.emb_scope, reuse=False)
+
             # seq2seq encoder & decoder
             encoder_outputs, encoder_states = self.build_encoder(embed, input_lengths)
             (logits, sample_id), _, _ = self.build_decoder(encoder_outputs, encoder_states,
@@ -45,7 +43,7 @@ class Seq2SeqGenerator:
         return scores, generate_sequence
 
     def embeddings(self, inputs, emb_scope, reuse):
-        with tf.device('/cpu:0'), tf.variable_scope(emb_scope, reuse=reuse):
+        with tf.variable_scope(emb_scope, reuse=reuse):
             embed = tf.layers.dense(inputs, self.embedding_units,
                                     name='embedding', use_bias=False)
         return embed

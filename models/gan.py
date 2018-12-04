@@ -1,22 +1,18 @@
-import math
+"""
+https://github.com/sminocha/text-generation-GAN/blob/master/model.py
+"""
 import tensorflow as tf
-import numpy as np
-
 from models.discriminator import RNNDiscriminator
 from models.generator import Seq2SeqGenerator
+from train import hyperparameter as H
+
 
 def get_scope_variables(scope):
     return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope)
 
-global MAX_SUMMARY_LEN
-global MAX_TEXT_LEN
 
-MAX_SUMMARY_LEN = 100
-MAX_TEXT_LEN = 1000
-
-
-class SeqGAN():
-    def __init__(self, sess, discriminator, generator, reconstructor,
+class SeqGAN:
+    def __init__(self, sess, discriminator, generator, reconstructor, emb_scope,
                  learning_rate=0.001):
         self.sess = sess
         self.D = discriminator
@@ -25,102 +21,104 @@ class SeqGAN():
 
         # hyperparameters
         self.lr = learning_rate
-        self.learn_phase = True
+        self.learn_phase = None
 
-        # training parameter
-        self.time = 0
-        self.batch_size = 32
-        self.vocab_size = 400
-        self.output_max_length = 100
-
-        # input placeholder
-        # self.inputs = tf.placeholder(dtype=tf.int32, shape=(self._batch_size, None), name='inputs_text')
-        # self.inputs_length = tf.reduce_sum(tf.to_int32(tf.not_equal(self.inputs, 1)), -1)
-        # self.latent = tf.placeholder(dtype=tf.float32, shape=(self._batch_size, self._num_latent), name='inputs_latent')
-        self.sample_pl = tf.placeholder(dtype='bool', shape=(), name='sample')
+        # training parameter        
+        self.batch_size = H.batch_size
+        self.vocab_size = H.vocab_size
+        self.max_output_length = H.max_summary_len
         self._time = tf.Variable(0, name='time')
 
+        # manage scope
+        self.emb_scope = emb_scope
+
+        # ?
+        self.sample_pl = tf.placeholder(dtype='bool', shape=(), name='sample')
+
+
     def build_gan(self):
-        g_scores, g_seq = self.G.build_model()
-        r_seq = tf.placeholder(tf.float32, name='real_seq',
-                               shape=[self.batch_size, MAX_SUMMARY_LEN, self.vocab_size])
-        r_logits, r_preds = self.D.build_model(r_seq, reuse=False)
-        f_logits, f_preds = self.D.build_model(g_scores, reuse=True)
+        # placeholder: labeled text
+        labeled_text = tf.placeholder(tf.float32, name='labeled_text',
+                                      shape=[self.batch_size, H.max_text_len, self.vocab_size])
+        labeled_text_lengths = tf.placeholder(tf.int32, name='labeled_text_len', shape=[self.batch_size, ])
 
-        d_weights = get_scope_variables('discriminator')
-        g_weights = get_scope_variables('generator')
+        # placeholder: unlabeled text
+        unlabeled_text = tf.placeholder(tf.float32, name='unlabeled_text',
+                                        shape=[self.batch_size, H.max_text_len, self.vocab_size])
+        unlabeled_text_lengths = tf.placeholder(tf.int32, name='unlabeled_text_len', shape=[self.batch_size, ])
 
-        dis_op = self.discriminator_op(r_logits, f_logits, d_weights)
-        gen_op = self.generator_op(g_seq, f_logits, g_scores, g_weights)
+        # placeholder: summary
+        real_summary = tf.placeholder(tf.float32, name='real_summary',
+                                      shape=[self.batch_size, H.max_summary_len, self.vocab_size])
 
-        step_op = self._time.assign(self.time + 1)
+        # build generator
+        g_logits, g_seq = self.G.build_model(labeled_text, labeled_text_lengths, reuse=False)
 
-        if self.learn_phase is None:
-            gan_train_op = tf.group(gen_op, dis_op)
-        else:
-            gan_train_op = tf.cond(
-                tf.equal(tf.mod(self.time, self.learn_phase), 0),
-                lambda: gen_op,
-                lambda: dis_op)
+        # build discriminator
+        d_real_logits, d_real_preds = self.D.build_model(real_summary, reuse=False)
+        d_fake_logits, d_fake_preds = self.D.build_model(g_logits, reuse=True)
+
+        # build reconstructor
+        r_real_logits, r_real_seq = self.R.build_model(g_logits, labeled_text_lengths, reuse=False)
+        r_fake_logits, r_fake_seq = self.R.build_model(g_logits, unlabeled_text_lengths, reuse=True)
+
+        # get trainable parameters
+        d_weights = get_scope_variables('discriminator') + get_scope_variables('embedding')
+        r_weights = get_scope_variables('reconstructor') + get_scope_variables('embedding')
+        g_weights = get_scope_variables('generator') + get_scope_variables('embedding')
+
+        # loss: discriminator
+        d_r_loss = -tf.reduce_mean(tf.log(d_real_preds))  # r_preds -> 1.
+        d_f_loss = -tf.reduce_mean(tf.log(1 - d_fake_preds))  # g_preds -> 0.
+        dis_loss = d_r_loss + d_f_loss
+
+        # loss: reconstructor
+        r_r_loss = tf.contrib.seq2seq.sequence_loss(r_real_logits, labeled_text)
+        r_f_loss = tf.contrib.seq2seq.sequence_loss(r_fake_logits, unlabeled_text)
+        rec_loss = r_r_loss + r_f_loss
+
+        # loss: generator
+        gen_loss = r_f_loss - d_f_loss  # TODO: negative d_f_loss ?
+
+        # optimization operator
+        dis_op = self.train_operator(loss_scope='loss/discriminator', loss=dis_loss, weights=d_weights)
+        rec_op = self.train_operator(loss_scope='loss/reconstructor', loss=rec_loss, weights=r_weights)
+        gen_op = self.train_operator(loss_scope='loss/generator', loss=gen_loss, weights=g_weights)
+
+        # define train operator
+        step_op = self._time + 1
+        gan_train_op = tf.group(gen_op, dis_op, rec_op)
 
         self.train_op = tf.group(gan_train_op, step_op)
         self.summary_op = tf.summary.merge_all()
         self.saver = tf.train.Saver()
         self.sess.run(tf.global_variables_initializer())
 
-    def discriminator_op(self, r_logits, f_logits, d_weights):
-        with tf.variable_scope('loss/discriminator'):
-            dis_optim = tf.train.AdamOptimizer(learning_rate=self.lr)
+    def train_operator(self, loss_scope, loss, weights):
+        with tf.variable_scope(loss_scope):
+            # optimizer
+            optim = tf.train.AdamOptimizer(learning_rate=self.lr)
 
-            r_loss = -tf.reduce_mean(r_logits)
-            f_loss = tf.reduce_mean(f_logits)
-            d_loss = r_loss + f_loss
+            # update
+            optim = optim.minimize(loss, var_list=weights)
+            tf.summary.scalar(loss_scope, loss)
 
-            tf.summary.scalar('d_loss', d_loss)
-            d_optim = dis_optim.minimize(d_loss, var_list=d_weights)
-
-        return d_optim
-
-    def generator_op(self, g_seq, f_logits, g_scores, g_weights):
-        with tf.variable_scope('loss/generator'):
-            gen_optim = tf.train.AdamOptimizer(learning_rate=self.lr)
-            reward_op = tf.train.GradientDescentOptimizer(1e-3)
-
-            g_seq = tf.one_hot(g_seq, self.vocab_size)
-            g_scores = tf.clip_by_value(g_scores * g_seq, 1e-20, 1)
-
-            expected_reward = tf.Variable(tf.zeros((self.output_max_length,)))
-            reward = f_logits - expected_reward[:tf.shape(f_logits)[1]]
-            mean_reward = tf.reduce_mean(reward)
-
-            exp_reward_loss = tf.reduce_mean(tf.abs(reward))
-            exp_op = reward_op.minimize(
-                exp_reward_loss, var_list=[expected_reward])
-
-            reward = tf.expand_dims(tf.cumsum(reward, axis=1, reverse=True), -1)
-            gen_reward = tf.log(g_scores) * reward
-            gen_reward = tf.reduce_mean(gen_reward)
-
-            gen_loss = -gen_reward
-
-            gen_op = gen_optim.minimize(gen_loss, var_list=g_weights)
-
-            g_optim = tf.group(gen_op, exp_op)
-
-        tf.summary.scalar('loss/expected_reward', exp_reward_loss)
-        tf.summary.scalar('reward/mean', mean_reward)
-        tf.summary.scalar('reward/generator', gen_reward)
-
-        return g_optim
+        return optim
 
 
 if __name__ == '__main__':
-    discriminator = RNNDiscriminator(num_classes=2, vocab_size=400,
+    import os
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
+    sess = tf.Session()
+    scope = tf.get_variable_scope()
+    discriminator = RNNDiscriminator(emb_scope=scope, num_classes=2, vocab_size=400,
                                      embedding_units=64, hidden_units=64)
-    generator = Seq2SeqGenerator(vocab_size=400, embedding_units=64,
-                                 enc_units=256, dec_units=256, batch_size=32)
-    reconstructor = Seq2SeqGenerator(vocab_size=400, embedding_units=64,
-                                     enc_units=256, dec_units=256, batch_size=32)
-    sess = None
-    gan = SeqGAN(sess, discriminator, generator, reconstructor)
+    generator = Seq2SeqGenerator(emb_scope=scope, namescope='generator', vocab_size=400,
+                                 embedding_units=64, enc_units=256, dec_units=256, batch_size=32)
+    reconstructor = Seq2SeqGenerator(emb_scope=scope, namescope='reconstructor', vocab_size=400,
+                                     embedding_units=64, enc_units=256, dec_units=256, batch_size=32)
+    gan = SeqGAN(sess, discriminator, generator, reconstructor, emb_scope=scope)
     gan.build_gan()
+    print('done gan')

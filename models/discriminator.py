@@ -7,35 +7,37 @@ output: real/fake logit
 import math
 import tensorflow as tf
 
+
 class RNNDiscriminator:
-    def __init__(self, num_classes=2, vocab_size=1000, 
+    def __init__(self, emb_scope, num_classes=2, vocab_size=1000,
                  embedding_units=128, hidden_units=64):
         self.num_classes = 1 if num_classes is 2 else num_classes
         self.vocab_size = vocab_size
         self.embedding_units = embedding_units
         self.hidden_units = hidden_units
+        self.emb_scope = emb_scope
 
     def embeddings(self, inputs, emb_scope, reuse):
-        with tf.device('/cpu:0'), tf.variable_scope(emb_scope, reuse=reuse):
+        with tf.variable_scope(emb_scope, reuse=reuse):
             embed = tf.layers.dense(inputs, self.embedding_units,
                                     name='embedding', use_bias=False)
         return embed
 
     def build_model(self, inputs_seq, reuse=False):
         with tf.variable_scope('discriminator', reuse=reuse):
-            # - embedding layer - # 
-            self.emb_scope = tf.get_variable_scope()
-            inputs_embdded = self.embeddings(inputs_seq, self.emb_scope, reuse=False)
+            # - embedding layer - #
+            # embedding layer is firstly defined in generator
+            inputs_embdded = self.embeddings(inputs_seq, self.emb_scope, reuse=True)
             
             # rnn cell 
             cell = tf.nn.rnn_cell.LSTMCell(num_units=self.hidden_units)
             cell = tf.nn.rnn_cell.DropoutWrapper(cell=cell,
                                                  output_keep_prob=.5)
-            cell = tf.contrib.rnn.FusedRNNCellAdaptor(cell, True)
+            rnn = tf.contrib.rnn.FusedRNNCellAdaptor(cell, True)
 
             ## TODO :: multiple layer
             input_enc = tf.transpose(inputs_embdded, (1, 0, 2))
-            rnn_output, _ = cell(input_enc, dtype=tf.float32)
+            rnn_output, _ = rnn(input_enc, dtype=tf.float32)
             rnn_output = tf.transpose(rnn_output, (1, 0, 2))
 
             # Reduces to binary prediction.
