@@ -11,41 +11,43 @@ import tensorflow as tf
 from models.utils import CustomGreedyEmbeddingHelper
 
 
-MAX_LEN = 1000
+MAX_TEXT_LEN = 1000
 
 
 class Seq2SeqGenerator:
-    def __init__(self, vocab_size, embedding_dim, enc_units, dec_units, batch_size):
+    def __init__(self, vocab_size, embedding_units, enc_units, dec_units, batch_size):
         self.vocab_size = vocab_size
-        self.embedding_dim = embedding_dim
+        self.embedding_units = embedding_units
         self.enc_units = enc_units
         self.dec_units = dec_units
         self.batch_size = batch_size
-        self.output_max_length = 300
+        self.max_output_length = 300
         self._tokenID_start = 0
         self._tokenID_end = 1
 
     def build_model(self):
-        train_inputs = tf.placeholder(tf.float32, shape=[self.batch_size, MAX_LEN, self.vocab_size])
-        # input_lengths = tf.reduce_sum(tf.to_int32(tf.not_equal(train_inputs, 1)), -1)
-        input_lengths = tf.placeholder(tf.int32, shape=[self.batch_size, ])
-        self.start_tokens = tf.one_hot(tf.fill([self.batch_size, ], self._tokenID_start),
-                                       self.vocab_size)
+        with tf.variable_scope('generator'):
+            train_inputs = tf.placeholder(tf.float32, name='G_input',
+                                          shape=[self.batch_size, MAX_TEXT_LEN, self.vocab_size])
+            input_lengths = tf.placeholder(tf.int32, name='G_input_length', shape=[self.batch_size, ])
+            self.start_tokens = tf.one_hot(tf.fill([self.batch_size, ], self._tokenID_start),
+                                           self.vocab_size)
+            # embedding
+            self.emb_scope = tf.get_variable_scope()
+            embed = self.embeddings(train_inputs, self.emb_scope, reuse=False)
+            # seq2seq encoder & decoder
+            encoder_outputs, encoder_states = self.build_encoder(embed, input_lengths)
+            (logits, sample_id), _, _ = self.build_decoder(encoder_outputs, encoder_states,
+                                                           input_lengths=input_lengths)
+            scores = tf.nn.softmax(logits)
+            generate_sequence = tf.argmax(logits, axis=2)
 
-        self.emb_scope = tf.get_variable_scope()
-        embed = self.embeddings(train_inputs, self.emb_scope, reuse=False)
-
-        encoder_outputs, encoder_states = self.build_encoder(embed, input_lengths)
-        decoder_outputs = self.build_decoder(encoder_outputs, encoder_states,
-                                             input_lengths=input_lengths)
-
-        return decoder_outputs
+        return scores, generate_sequence
 
     def embeddings(self, inputs, emb_scope, reuse):
         with tf.device('/cpu:0'), tf.variable_scope(emb_scope, reuse=reuse):
-            embed = tf.layers.dense(inputs, self.embedding_dim,
+            embed = tf.layers.dense(inputs, self.embedding_units,
                                     name='embedding', use_bias=False)
-            # embeddings = tf.trainable_variables('embeddings')
         return embed
 
     def build_encoder(self, embed, input_length):
@@ -89,7 +91,7 @@ class Seq2SeqGenerator:
                                                       output_layer=projection_layer)
             outputs = tf.contrib.seq2seq.dynamic_decode(decoder=decoder,
                                                         swap_memory=True,
-                                                        maximum_iterations=self.output_max_length)
+                                                        maximum_iterations=self.max_output_length)
         print("done!")
         return outputs
 
