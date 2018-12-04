@@ -1,13 +1,9 @@
-"""
-input: short text (integer sequence)
-model: input -> embedding -> seq2seq(RNN+attention) -> output
-output: long text (integer sequence)
-"""
 import tensorflow as tf
 import os
 import numpy as np
 
 class Seq2SeqReconstructor:
+
     def __init__(self, vocab_size, embedding_dim, enc_units, dec_units, batch_size):
         self.vocab_size = vocab_size
         self.embedding_dim = embedding_dim
@@ -15,7 +11,6 @@ class Seq2SeqReconstructor:
         self.dec_units = dec_units
         self.batch_size = batch_size
         self.output_max_length = 800
-        self.start_tokens=0
 
     def build_model(self):
         with tf.get_default_graph().as_default():
@@ -30,28 +25,27 @@ class Seq2SeqReconstructor:
 
                 dense_emb = tf.layers.dense(one_hot_train_inputs, self.embedding_dim, use_bias=False, name='one_hot_embedding/dense_layer2',reuse=tf.AUTO_REUSE)
 
-            encoder_outputs, encoder_states = build_encoder(dense_emb,input_lengths1)
+            encoder_outputs, encoder_states = self.build_encoder(dense_emb,input_lengths)
             decoder_outputs = self.build_decoder(encoder_outputs, encoder_states,
                                                  input_lengths=input_lengths,
-                                                 start_tokens=self.start_tokens)
+                                                 start_tokens=start_tokens, embed_input = dense_emb)
+            return decoder_outputs
 
-    def build_encoder(self, dense_emb, input_length):
+    def build_encoder(self, embedding_value, input_len):
         with tf.variable_scope('encode',reuse=tf.AUTO_REUSE):
-            lstm_fw_cell = tf.nn.rnn_cell.GRUCell(num_units=self.enc_units//2, #kernel_initializer= tf.constant_initializer(value=0, dtype=tf.float32),
-                                                  name='lstm_fw')
+            lstm_fw_cell = tf.nn.rnn_cell.GRUCell(num_units=self.enc_units//2, name='lstm_fw')
             lstm_fw_cell = tf.nn.rnn_cell.DropoutWrapper(lstm_fw_cell, output_keep_prob=0.5)
-            lstm_bw_cell = tf.nn.rnn_cell.GRUCell(num_units=self.enc_units//2, #kernel_initializer= tf.constant_initializer(value=0, dtype=tf.float32),
-                                                  name='lstm_bw')
+            lstm_bw_cell = tf.nn.rnn_cell.GRUCell(num_units=self.enc_units//2, name='lstm_bw')
             lstm_bw_cell = tf.nn.rnn_cell.DropoutWrapper(lstm_bw_cell, output_keep_prob=0.5)
 
-            output, state = tf.nn.bidirectional_dynamic_rnn(lstm_fw_cell, lstm_bw_cell, dense_emb,
-                                                            sequence_length=input_length, dtype=tf.float32)
+            output, state = tf.nn.bidirectional_dynamic_rnn(lstm_fw_cell, lstm_bw_cell, embedding_value,
+                                                            sequence_length=input_len, dtype=tf.float32)
             outputs_concat = tf.concat(output,axis=-1)
             state = tf.concat(state, axis=-1)
 
             return outputs_concat, state
 
-    def build_decoder(self, encoder_outputs, encoder_states, input_lengths):
+    def build_decoder(self, encoder_outputs, encoder_states, input_lengths, start_tokens,embed_input):
         with tf.variable_scope('decode',reuse=tf.AUTO_REUSE):
             # <attention>
             attention_mechanism = tf.contrib.seq2seq.BahdanauAttention(num_units=self.dec_units,
@@ -66,7 +60,7 @@ class Seq2SeqReconstructor:
             #decoder_initial_state = decoder_cell.zero_state(batch_size, tf.float32).clone(cell_state=encoder_states)
             # <helper>
              #train_helper = tf.contrib.seq2seq.TrainingHelper(dense_emb, output_max_length)
-            weights = tf.get_default_graph().get_tensor_by_name(os.path.split(dense_emb.name)[0] + '/kernel:0')
+            weights = tf.get_default_graph().get_tensor_by_name(os.path.split(embed_input.name)[0] + '/kernel:0')
             pred_helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(weights,
                                                                    start_tokens=tf.to_int32(start_tokens),
                                                                    end_token=1)
@@ -79,8 +73,7 @@ class Seq2SeqReconstructor:
             decoder = tf.contrib.seq2seq.BasicDecoder(decoder_cell, pred_helper, decoder_initial_state,
                                                       output_layer=projection_layer)
             decode_outputs = tf.contrib.seq2seq.dynamic_decode(decoder=decoder,
-                                                        swap_memory=True, output_time_major=False, impute_finished=True,
-                                                        maximum_iterations=output_max_length)
+                                                        maximum_iterations=self.output_max_length)
             print("done!")
             return decode_outputs
 
@@ -93,8 +86,8 @@ if __name__ == '__main__':
                              dec_units=64,
                              batch_size=16)
     outputs = model.build_model()
-    # output specification
     outputs[0].rnn_output  # logit
     outputs[0].sample_id  # token id
     outputs[1]
     outputs[2]
+    
