@@ -9,6 +9,7 @@ output: short text (integer sequence)
 """
 import tensorflow as tf
 from models.utils import CustomGreedyEmbeddingHelper
+import tensorflow_probability as tfp
 from train import hyperparameter as H
 
 
@@ -21,30 +22,25 @@ class Seq2SeqGenerator:
         self.enc_units = enc_units
         self.dec_units = dec_units
         self.batch_size = batch_size
-        self.max_output_length = H.max_summary_len
+        self.max_output_length = H.max_summary_len if namescope is 'generator' else H.max_text_len
         self._tokenID_start = 0
         self._tokenID_end = 1
         self.namescope = namescope
 
-    def build_model(self, train_inputs, input_lengths, reuse=False):
+    def build_model(self, train_inputs, input_lengths, reuse=False, emb_reuse=False):
         with tf.variable_scope(self.namescope, reuse=reuse):
             self.start_tokens = tf.one_hot(tf.fill([self.batch_size, ], self._tokenID_start),
                                            self.vocab_size)
-            # embedding
-            if reuse:
-                reuse_embed = False
-            else:
-                reuse_embed = True
-            embed = self.embeddings(train_inputs, self.emb_scope, reuse=reuse_embed)
+            embed = self.embeddings(train_inputs, self.emb_scope, reuse=emb_reuse)
 
             # seq2seq encoder & decoder
             encoder_outputs, encoder_states = self.build_encoder(embed, input_lengths)
-            (logits, sample_id), _, _ = self.build_decoder(encoder_outputs, encoder_states,
-                                                           input_lengths=input_lengths)
-            scores = tf.nn.softmax(logits)
-            generate_sequence = tf.argmax(logits, axis=2)
+            (probs, sample_id), _, _ = self.build_decoder(encoder_outputs, encoder_states,
+                                                          input_lengths=input_lengths)
+            # TODO: gumbel softmax
+            generate_sequence = tfp.distributions.RelaxedOneHotCategorical()
 
-        return scores, generate_sequence
+        return probs, generate_sequence
 
     def embeddings(self, inputs, emb_scope, reuse):
         with tf.variable_scope(emb_scope, reuse=reuse):
@@ -87,7 +83,7 @@ class Seq2SeqGenerator:
                                                       end_token=self._tokenID_end)
 
             # <projection layer>
-            projection_layer = tf.layers.Dense(self.vocab_size, use_bias=False)
+            projection_layer = tf.layers.Dense(self.vocab_size, activation='softmax', use_bias=False)
             # <dynamic decoding>
             decoder = tf.contrib.seq2seq.BasicDecoder(decoder_cell, pred_helper, decoder_initial_state,
                                                       output_layer=projection_layer)

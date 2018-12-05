@@ -6,6 +6,20 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.contrib.seq2seq.python.ops.helper import Helper
+import tensorflow_probability as tfp
+
+
+def dynamic_time_pad(recon_output, max_len):
+    shape = recon_output.get_shape().as_list()
+    shape_op = tf.shape(recon_output)
+
+    pad_size = max_len - shape_op[1]
+    pad_type = recon_output.dtype
+
+    pad_tensor = tf.zeros([shape[0], pad_size, shape[2]], dtype=pad_type)
+
+    recon_output = tf.concat([recon_output, pad_tensor], axis=1)
+    return recon_output
 
 
 class CustomGreedyEmbeddingHelper(Helper):
@@ -67,6 +81,7 @@ class CustomGreedyEmbeddingHelper(Helper):
     def next_inputs(self, time, outputs, state, sample_ids, name=None):
         """next_inputs_fn for GreedyEmbeddingHelper."""
         del time  # unused by next_inputs_fn
+        outputs = tfp.distributions.RelaxedOneHotCategorical(1e-3, probs=outputs)
         finished = math_ops.equal(sample_ids, self._end_token)
         all_finished = math_ops.reduce_all(finished)
         next_inputs = control_flow_ops.cond(
