@@ -52,15 +52,16 @@ class SeqGAN:
                                       shape=[self.batch_size, H.max_summary_len, self.vocab_size])
 
         # build generator
-        g_logits, g_seq = self.G.build_model(labeled_text, labeled_text_lengths, reuse=False)
+        g_real_logits, g_real_seq = self.G.build_model(labeled_text, labeled_text_lengths, reuse=False)
+        g_fake_logits, g_fake_seq = self.G.build_model(unlabeled_text, unlabeled_text_lengths, reuse=True)
 
         # build discriminator
         d_real_logits, d_real_preds = self.D.build_model(real_summary, reuse=False)
-        d_fake_logits, d_fake_preds = self.D.build_model(g_logits, reuse=True)
+        d_fake_logits, d_fake_preds = self.D.build_model(g_fake_logits, reuse=True)
 
         # build reconstructor
-        r_real_logits, r_real_seq = self.R.build_model(g_logits, labeled_text_lengths, reuse=False)
-        r_fake_logits, r_fake_seq = self.R.build_model(g_logits, unlabeled_text_lengths, reuse=True)
+        r_real_logits, r_real_seq = self.R.build_model(g_real_logits, labeled_text_lengths, reuse=False)
+        r_fake_logits, r_fake_seq = self.R.build_model(g_fake_logits, unlabeled_text_lengths, reuse=True)
 
         # get trainable parameters
         d_weights = get_scope_variables('discriminator') + get_scope_variables('embedding')
@@ -86,7 +87,7 @@ class SeqGAN:
         gen_op = self.train_operator(loss_scope='loss/generator', loss=gen_loss, weights=g_weights)
 
         # define train operator
-        step_op = self._time + 1
+        step_op = self._time.assign(self._time + 1)
         gan_train_op = tf.group(gen_op, dis_op, rec_op)
 
         self.train_op = tf.group(gan_train_op, step_op)

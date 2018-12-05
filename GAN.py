@@ -203,14 +203,8 @@ class EGAN(object):
         
         step_op = self._time.assign(self._time+1)
         
-        if self._learn_phase is None:
-            gan_train_op = tf.group(gen_op, dis_op)
-        else:
-            gan_train_op = tf.cond(
-                    tf.equal(tf.mod(self._time, self._learn_phase), 0),
-                    lambda: gen_op,
-                    lambda: dis_op)
-            
+        gan_train_op = tf.group(gen_op, dis_op)
+
         self.train_op = tf.group(gan_train_op, step_op)
         self.summary_op = tf.summary.merge_all()
         self._saver = tf.train.Saver()

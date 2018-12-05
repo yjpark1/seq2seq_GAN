@@ -31,7 +31,11 @@ class Seq2SeqGenerator:
             self.start_tokens = tf.one_hot(tf.fill([self.batch_size, ], self._tokenID_start),
                                            self.vocab_size)
             # embedding
-            embed = self.embeddings(train_inputs, self.emb_scope, reuse=False)
+            if reuse:
+                reuse_embed = False
+            else:
+                reuse_embed = True
+            embed = self.embeddings(train_inputs, self.emb_scope, reuse=reuse_embed)
 
             # seq2seq encoder & decoder
             encoder_outputs, encoder_states = self.build_encoder(embed, input_lengths)
