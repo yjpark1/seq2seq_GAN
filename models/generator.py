@@ -37,8 +37,9 @@ class Seq2SeqGenerator:
             encoder_outputs, encoder_states = self.build_encoder(embed, input_lengths)
             (probs, sample_id), _, _ = self.build_decoder(encoder_outputs, encoder_states,
                                                           input_lengths=input_lengths)
-            # TODO: gumbel softmax
-            generate_sequence = tfp.distributions.RelaxedOneHotCategorical()
+            # gumbel trick
+            dist = tfp.distributions.RelaxedOneHotCategorical(1e-2, probs=probs)
+            generate_sequence = dist.sample()
 
         return probs, generate_sequence
 

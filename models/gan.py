@@ -52,21 +52,21 @@ class SeqGAN:
 
         # build generator
         g_real_probs, g_real_seq = self.G.build_model(labeled_text, labeled_text_lengths,
-                                                       reuse=False, emb_reuse=False)
+                                                      reuse=False, emb_reuse=False)
         g_fake_probs, g_fake_seq = self.G.build_model(unlabeled_text, unlabeled_text_lengths,
-                                                       reuse=True, emb_reuse=True)
+                                                      reuse=True, emb_reuse=True)
 
         # build discriminator
         d_real_logits, d_real_preds = self.D.build_model(real_summary, reuse=False)
-        d_fake_logits, d_fake_preds = self.D.build_model(g_fake_probs, reuse=True)
+        d_fake_logits, d_fake_preds = self.D.build_model(g_fake_seq, reuse=True)
 
         # build reconstructor
         r_real_probs, r_real_seq = self.R.build_model(g_real_probs, labeled_text_lengths,
-                                                       reuse=False, emb_reuse=True)
+                                                      reuse=False, emb_reuse=True)
         r_target_probs, r_target_seq = self.R.build_model(real_summary, labeled_text_lengths,
-                                                           reuse=True, emb_reuse=True)
-        r_fake_logits, r_fake_seq = self.R.build_model(g_fake_logits, unlabeled_text_lengths,
-                                                       reuse=True, emb_reuse=True)
+                                                          reuse=True, emb_reuse=True)
+        r_fake_probs, r_fake_seq = self.R.build_model(g_fake_probs, unlabeled_text_lengths,
+                                                      reuse=True, emb_reuse=True)
 
         # get trainable parameters
         d_weights = get_scope_variables('discriminator') + get_scope_variables('embedding')
@@ -83,13 +83,13 @@ class SeqGAN:
         unlabeled_text_target = tf.math.argmax(unlabeled_text, axis=-1)
 
         # pad output
-        r_real_logits = dynamic_time_pad(r_real_logits, H.max_text_len)
-        r_fake_logits = dynamic_time_pad(r_fake_logits, H.max_text_len)
-        r_target_logits = dynamic_time_pad(r_target_logits, H.max_text_len)
+        r_real_probs = dynamic_time_pad(r_real_probs, H.max_text_len)
+        r_fake_probs = dynamic_time_pad(r_fake_probs, H.max_text_len)
+        r_target_probs = dynamic_time_pad(r_target_probs, H.max_text_len)
 
-        r_r_loss = tf.contrib.seq2seq.sequence_loss(r_real_logits, labeled_text_target, weight_l_txt)
-        r_f_loss = tf.contrib.seq2seq.sequence_loss(r_fake_logits, unlabeled_text_target, weight_u_txt)
-        r_t_loss = tf.contrib.seq2seq.sequence_loss(r_target_logits, labeled_text_target, weight_l_txt)
+        r_r_loss = tf.contrib.seq2seq.sequence_loss(r_real_probs, labeled_text_target, weight_l_txt)
+        r_f_loss = tf.contrib.seq2seq.sequence_loss(r_fake_probs, unlabeled_text_target, weight_u_txt)
+        r_t_loss = tf.contrib.seq2seq.sequence_loss(r_target_probs, labeled_text_target, weight_l_txt)
 
         rec_loss = r_r_loss + r_f_loss + r_t_loss
 

@@ -81,7 +81,11 @@ class CustomGreedyEmbeddingHelper(Helper):
     def next_inputs(self, time, outputs, state, sample_ids, name=None):
         """next_inputs_fn for GreedyEmbeddingHelper."""
         del time  # unused by next_inputs_fn
-        outputs = tfp.distributions.RelaxedOneHotCategorical(1e-3, probs=outputs)
+        # gumbel trick
+        # http://anotherdatum.com/gumbel-gan.html
+        dist = tfp.distributions.RelaxedOneHotCategorical(1e-2, probs=outputs)
+        outputs = dist.sample()
+
         finished = math_ops.equal(sample_ids, self._end_token)
         all_finished = math_ops.reduce_all(finished)
         next_inputs = control_flow_ops.cond(
