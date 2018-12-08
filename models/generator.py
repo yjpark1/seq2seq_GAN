@@ -15,13 +15,13 @@ from train import hyperparameter as H
 
 class Seq2SeqGenerator:
     def __init__(self, emb_scope, namescope, vocab_size,
-                 embedding_units, enc_units, dec_units, batch_size):
+                 embedding_units, enc_units, dec_units):
         self.emb_scope = emb_scope
         self.vocab_size = vocab_size
         self.embedding_units = embedding_units
         self.enc_units = enc_units
         self.dec_units = dec_units
-        self.batch_size = batch_size
+        #self.batch_size = batch_size
         self.max_output_length = H.max_summary_len if namescope is 'generator' else H.max_text_len
         self._tokenID_start = 0
         self._tokenID_end = 1
@@ -29,7 +29,9 @@ class Seq2SeqGenerator:
 
     def build_model(self, train_inputs, input_lengths, reuse=False, emb_reuse=False):
         with tf.variable_scope(self.namescope, reuse=reuse):
-            self.start_tokens = tf.one_hot(tf.fill([self.batch_size, ], self._tokenID_start),
+            
+            batch_size = tf.shape(train_inputs)[0]
+            self.start_tokens = tf.one_hot(tf.fill([batch_size, ], self._tokenID_start),
                                            self.vocab_size)
             embed = self.embeddings(train_inputs, self.emb_scope, reuse=emb_reuse)
 
@@ -40,7 +42,12 @@ class Seq2SeqGenerator:
             # gumbel trick
             dist = tfp.distributions.RelaxedOneHotCategorical(1e-2, probs=probs)
             generate_sequence = dist.sample()
-
+            
+            if self.namescope is 'generator':
+                print("build generator done!")        
+            else:
+                print("build reconstructor done!")
+                
         return probs, generate_sequence
 
     def embeddings(self, inputs, emb_scope, reuse):
@@ -67,6 +74,8 @@ class Seq2SeqGenerator:
 
     def build_decoder(self, encoder_outputs, encoder_states, input_lengths):
         with tf.variable_scope('decode'):
+            
+            batch_size = tf.shape(input_lengths)[0]
             # <attention>
             attention_mechanism = tf.contrib.seq2seq.BahdanauAttention(num_units=self.dec_units,
                                                                        memory=encoder_outputs,
@@ -75,7 +84,7 @@ class Seq2SeqGenerator:
             decoder_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism,
                                                                attention_layer_size=self.dec_units)
 
-            decoder_initial_state = decoder_cell.zero_state(self.batch_size, tf.float32).clone(cell_state=encoder_states)
+            decoder_initial_state = decoder_cell.zero_state(batch_size, tf.float32).clone(cell_state=encoder_states)
 
             # <helper>
             embeddings = lambda x: self.embeddings(x, self.emb_scope, reuse=True)
@@ -91,7 +100,6 @@ class Seq2SeqGenerator:
             outputs = tf.contrib.seq2seq.dynamic_decode(decoder=decoder,
                                                         swap_memory=True,
                                                         maximum_iterations=self.max_output_length)
-        print("done!")
         return outputs
 
 
@@ -104,8 +112,7 @@ if __name__ == '__main__':
     model = Seq2SeqGenerator(vocab_size=100,
                              embedding_dim=64,
                              enc_units=256,
-                             dec_units=256,
-                             batch_size=32)
+                             dec_units=256)
     outputs = model.build_model()
     # output specification
     # logit (batch, time step, vocab size)

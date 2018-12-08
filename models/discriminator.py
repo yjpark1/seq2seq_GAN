@@ -43,7 +43,7 @@ class RNNDiscriminator:
             # Reduces to binary prediction.
             logits = tf.layers.dense(rnn_output[:, -1, :], self.num_classes)
             preds = tf.sigmoid(logits)
-            
+            print("build discriminator done!")
         return logits, preds
 
 if __name__ == '__main__':

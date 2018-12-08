@@ -9,14 +9,14 @@ from tensorflow.contrib.seq2seq.python.ops.helper import Helper
 import tensorflow_probability as tfp
 
 
-def dynamic_time_pad(recon_output, max_len):
+def dynamic_time_pad(recon_output, max_len, batch_size):
     shape = recon_output.get_shape().as_list()
     shape_op = tf.shape(recon_output)
 
     pad_size = max_len - shape_op[1]
     pad_type = recon_output.dtype
 
-    pad_tensor = tf.zeros([shape[0], pad_size, shape[2]], dtype=pad_type)
+    pad_tensor = tf.zeros([batch_size, pad_size, shape[2]], dtype=pad_type)
 
     recon_output = tf.concat([recon_output, pad_tensor], axis=1)
     return recon_output
