@@ -12,6 +12,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 import numpy as np
 import tensorflow as tf
 import time
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 ## local import
@@ -109,7 +110,7 @@ for epoch in range(1, num_epoch+1):
     train_L_G = 0.
     train_L_R = 0.
     
-    for step in range(1, num_steps+1):
+    for step in tqdm(range(1, num_steps+1)):
         
         l_seq, l_len = next_fd(labeled_dat, max_len = text_len, vocab_size = 400)
         u_seq, u_len = next_fd(unlabeled_dat, max_len = text_len, vocab_size = 400)
