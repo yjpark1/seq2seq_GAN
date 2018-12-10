@@ -34,25 +34,25 @@ class SeqGAN:
     def build_gan(self):
         # placeholder: labeled text
         self.labeled_text = tf.placeholder(tf.float32, name='labeled_text',
-                                      shape=[None, H.max_text_len, self.vocab_size])
+                                           shape=[None, H.max_text_len, self.vocab_size])
         self.labeled_text_lengths = tf.placeholder(tf.int32, name='labeled_text_len', shape=[None, ])
         #weight_l_txt = tf.placeholder(tf.float32, name='labeled_text_wgt', shape=[None, H.max_text_len])
         
         batch_size = tf.shape(self.labeled_text)[0]
-        weight_l_txt = tf.ones(shape = [batch_size, H.max_text_len],
-                               dtype = tf.float32, name='labeled_text_wgt')
+        weight_l_txt = tf.ones(shape=[batch_size, H.max_text_len],
+                               dtype=tf.float32, name='labeled_text_wgt')
 
         # placeholder: unlabeled text
         self.unlabeled_text = tf.placeholder(tf.float32, name='unlabeled_text',
-                                        shape=[None, H.max_text_len, self.vocab_size])
+                                             shape=[None, H.max_text_len, self.vocab_size])
         self.unlabeled_text_lengths = tf.placeholder(tf.int32, name='unlabeled_text_len', shape=[None, ])
         #weight_u_txt = tf.placeholder(tf.float32, name='unlabeled_text_wgt', shape=[None, H.max_text_len])
-        weight_u_txt = tf.ones(shape = [batch_size, H.max_text_len],
-                               dtype = tf.float32, name='unlabeled_text_wgt')
+        weight_u_txt = tf.ones(shape=[batch_size, H.max_text_len],
+                               dtype=tf.float32, name='unlabeled_text_wgt')
 
         # placeholder: summary
         self.real_summary = tf.placeholder(tf.float32, name='real_summary',
-                                      shape=[None, H.max_summary_len, self.vocab_size])
+                                           shape=[None, H.max_summary_len, self.vocab_size])
         self.real_summary_length = tf.placeholder(tf.int32, name='real_summary_length',
                                                   shape=[None, ])
 
@@ -91,9 +91,9 @@ class SeqGAN:
         unlabeled_text_target = tf.math.argmax(self.unlabeled_text, axis=-1)
 
         # pad output
-        r_real_probs = dynamic_time_pad(r_real_probs, H.max_text_len,batch_size)
-        r_fake_probs = dynamic_time_pad(r_fake_probs, H.max_text_len,batch_size)
-        r_target_probs = dynamic_time_pad(r_target_probs, H.max_text_len,batch_size)
+        r_real_probs = dynamic_time_pad(r_real_probs, H.max_text_len, batch_size)
+        r_fake_probs = dynamic_time_pad(r_fake_probs, H.max_text_len, batch_size)
+        r_target_probs = dynamic_time_pad(r_target_probs, H.max_text_len, batch_size)
 
         r_r_loss = tf.contrib.seq2seq.sequence_loss(r_real_probs, labeled_text_target, weight_l_txt)
         r_f_loss = tf.contrib.seq2seq.sequence_loss(r_fake_probs, unlabeled_text_target, weight_u_txt)
