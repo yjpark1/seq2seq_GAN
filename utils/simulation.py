@@ -9,16 +9,18 @@ import numpy as np
 import tensorflow as tf
 from keras.preprocessing.sequence import pad_sequences
 
-def batch(inputs, max_seq_len = None, vocab_size = None):
+
+def batch(inputs, max_seq_len=None, vocab_size=None):
     """ One hot vector"""
     #inputs = next(labeled_dat)
     batch_seq_len = [len(seq) for seq in inputs]
-    batch_seq_len = np.array(batch_seq_len, dtype = np.int32)
+    batch_seq_len = np.array(batch_seq_len, dtype=np.int32)
 
-    padded_inputs = pad_sequences(inputs, padding='post', maxlen = max_seq_len)
-    batch_one_hot = (np.arange(vocab_size) == padded_inputs[...,None]).astype(int)    
-    batch_one_hot = batch_one_hot.astype(np.float32)    
+    padded_inputs = pad_sequences(inputs, padding='post', maxlen=max_seq_len)
+    batch_one_hot = (np.arange(vocab_size) == padded_inputs[..., None]).astype(int)
+    batch_one_hot = batch_one_hot.astype(np.float32)
     return batch_one_hot, batch_seq_len
+
 
 def random_sequences(length_from, length_to,
                      vocab_lower, vocab_upper,
