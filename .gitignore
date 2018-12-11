@@ -1,3 +1,7 @@
+# dataset
+!datasets/TextWithoutSummary.csv
+!datasets/TextWithSummary.csv
+
 # man folder
 models/man/
 .idea/
