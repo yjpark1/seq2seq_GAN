@@ -2,10 +2,11 @@
 https://github.com/sminocha/text-generation-GAN/blob/master/model.py
 """
 import tensorflow as tf
-from models.utils import dynamic_time_pad
+from models.utils import dynamic_time_pad, dynamic_padded_weight
 from models.discriminator import RNNDiscriminator
 from models.generator import Seq2SeqGenerator
 from train import hyperparameter as H
+import utils.data_file
 
 
 def get_scope_variables(scope):
@@ -39,17 +40,15 @@ class SeqGAN:
         #weight_l_txt = tf.placeholder(tf.float32, name='labeled_text_wgt', shape=[None, H.max_text_len])
         
         batch_size = tf.shape(self.labeled_text)[0]
-        weight_l_txt = tf.ones(shape=[batch_size, H.max_text_len],
-                               dtype=tf.float32, name='labeled_text_wgt')
-
+        weight_l_txt = dynamic_padded_weight(self.labeled_text, self.labeled_text_lengths, H.max_text_len, batch_size)
+        
         # placeholder: unlabeled text
         self.unlabeled_text = tf.placeholder(tf.float32, name='unlabeled_text',
                                              shape=[None, H.max_text_len, self.vocab_size])
         self.unlabeled_text_lengths = tf.placeholder(tf.int32, name='unlabeled_text_len', shape=[None, ])
         #weight_u_txt = tf.placeholder(tf.float32, name='unlabeled_text_wgt', shape=[None, H.max_text_len])
-        weight_u_txt = tf.ones(shape=[batch_size, H.max_text_len],
-                               dtype=tf.float32, name='unlabeled_text_wgt')
-
+        weight_u_txt = dynamic_padded_weight(self.unlabeled_text, self.unlabeled_text_lengths, H.max_text_len, batch_size)
+        
         # placeholder: summary
         self.real_summary = tf.placeholder(tf.float32, name='real_summary',
                                            shape=[None, H.max_summary_len, self.vocab_size])

@@ -21,7 +21,18 @@ def dynamic_time_pad(recon_output, max_len, batch_size):
     recon_output = tf.concat([recon_output, pad_tensor], axis=1)
     return recon_output
 
+def dynamic_padded_weight(labeled_text, labeled_text_lengths, max_len, batch_size):
 
+    shape_op = tf.shape(labeled_text_lengths)
+    pad_size = max_len - shape_op[0]
+    pad_type = labeled_text.dtype
+    
+    one_tensor = tf.ones([batch_size, shape_op[0]], dtype = pad_type)
+    zero_tensor = tf.zeros([batch_size, pad_size], dtype = pad_type)
+    
+    dynamic_output = tf.concat([one_tensor, zero_tensor], axis = 1)
+    return dynamic_output
+    
 class CustomGreedyEmbeddingHelper(Helper):
     """A helper for use during inference.
     Uses the argmax of the output (treated as logits) and passes the

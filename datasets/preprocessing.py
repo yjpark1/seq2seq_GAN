@@ -99,7 +99,7 @@ data_add = read_files(paths_add, encoding='utf8')
 data_label_summ = data_label.body.values
 data_label_text = data_label.origin.values
 # file 2
-data_unlabel_text = data_label.body.values
+data_unlabel_text = data_unlabel.body.values
 # file 3
 data_add_summ = data_add.body.values
 data_add_text = data_add.origin.values
@@ -116,6 +116,7 @@ id = np.unique(id)
 
 data_add_text = np.delete(data_add_text, id)
 data_add_summ = np.delete(data_add_summ, id)
+data_unlabel_text = np.delete(data_unlabel_text, 995)
 
 # preprocess summary
 data_label_summ_prep = preprocess_text(data_label_summ)
@@ -142,11 +143,18 @@ TextWithSummary = pd.DataFrame({'summary_origin': summary_origin,
                                 })
 
 # combind datasets: Text With Summary
-data_unlabel_text = MorphAnalDocument(data_unlabel_text)
+text_unlabel = MorphAnalDocument(data_unlabel_text_prep)
 
 TextWithoutSummary = pd.DataFrame({'text_origin': data_unlabel_text,
-                                   'text': data_unlabel_text_prep,
-                                  })
+                                   'text': text_unlabel,
+                                   })
+
+
+idx = (TextWithSummary['summary'].str.len().values > 100) * (TextWithSummary['text'].str.len().values > 200)
+TextWithSummary = TextWithSummary[idx]
+
+idx = TextWithoutSummary['text'].str.len().values > 200
+TextWithoutSummary = TextWithoutSummary[idx]
 
 TextWithSummary.to_csv('datasets/TextWithSummary.csv', encoding='utf8')
 TextWithoutSummary.to_csv('datasets/TextWithoutSummary.csv', encoding='utf8')

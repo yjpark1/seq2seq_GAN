@@ -6,97 +6,62 @@ from tqdm import tqdm
 from collections import Counter
 from itertools import chain
 import matplotlib.pyplot as plt
+import tensorflow as tf
+import os
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 
-class DataGenerator(keras.utils.Sequence):
-    """Generates data for Keras"""
-    def __init__(self, text, summary_input, summary_target, num_token_output, batch_size=16):
-        """Initialization"""
-        self.text = text
-        self.summary_input = summary_input
-        self.summary_target = summary_target
-        self.batch_size = batch_size
-        self.shuffle = False
-        self.indexes = np.arange(len(text))
-        self.num_token_output = num_token_output
+class Generator:
+    def __init__(self, x, max_len=1000):
+        self.x = x
+        self.max_len = max_len
 
-    def sort_data(self):
-        # make numpy array
-        self.text = np.array(self.text)
-        self.summary_input = np.array(self.summary_input)
-        self.summary_target = np.array(self.summary_target)
+    def gen(self):
+        for b in self.x:
+            b = sequence.pad_sequences([b], maxlen=self.max_len, truncating='post', padding='post')
+            b = keras.utils.to_categorical(b, num_classes=24353)
+            yield b
 
-        # sort by length: text, summary_input, summary_target
-        text_length = [len(x) for x in self.text]
-        index = np.argsort(text_length)
 
-        self.text = self.text[index]
-        self.summary_input = self.summary_input[index]
-        self.summary_target = self.summary_target[index]
-
-    def __len__(self):
-        """Denotes the number of batches per epoch"""
-        return int(np.floor(len(self.text) / self.batch_size))
-
-    def __make_onehot_target(self, target):
-        out = []
-        for i, x in enumerate(target):
-            x = np.array(x) - 1
-            out.append(np.eye(self.num_token_output)[x])
-        return out
-
-    def __getitem__(self, index):
-        """Generate one batch of data"""
-        # Generate indexes of the batch
-        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
-
-        # Generate data
-        X, y = self.__data_generation(indexes)
-
-        return X, y
-
-    def __data_generation(self, indexes):
-        """Generates data containing batch_size samples
-        # X : (n_samples, *dim, n_channels)
-        """
-        # get batch data
-        batch_text = self.text[indexes]
-        batch_summary_input = self.summary_input[indexes]
-        batch_summary_target = self.summary_target[indexes]
-
-        max_len_txt = np.max([len(x) for x in batch_text])
-        max_len_summ_input = np.max([len(x) for x in batch_summary_input])
-
-        # preprocessing
-        # 1) make onehot target
-        batch_summary_target = self.__make_onehot_target(batch_summary_target)
-
-        # 2) pad sequence
-        batch_text = sequence.pad_sequences(batch_text, maxlen=max_len_txt, truncating='post', padding='pre')
-        batch_summary_input = sequence.pad_sequences(batch_summary_input, maxlen=max_len_summ_input, padding='post')
-        batch_summary_target = sequence.pad_sequences(batch_summary_target, maxlen=max_len_summ_input, padding='post')
-
-        return [batch_text, batch_summary_input], batch_summary_target
+def Token_startend(x):
+    return '<START> ' + x + '<END>'
 
 
 if __name__ == "__main__":
-    TextWithSummary = pd.read_csv('datasets/TextWithSummary.csv', encoding='utf8')
-    TextWithoutSummary = pd.read_csv('datasets/TextWithoutSummary.csv', encoding='utf8')
+    TextWithSummary = pd.read_csv('datasets/TextWithSummary.csv', encoding='utf8', dtype=object)
+    TextWithoutSummary = pd.read_csv('datasets/TextWithoutSummary.csv', encoding='utf8', dtype=object)
 
-    docs = TextWithSummary.summary.values.tolist() + TextWithSummary.text.values.tolist() + \
-           TextWithoutSummary.text.values.tolist()
+    # add <UNK>, <START>, <END>
+    TextWithSummary_summary = TextWithSummary.summary.values.tolist()
+    TextWithSummary_text = TextWithSummary.text.values.tolist()
+    TextWithoutSummary_text = TextWithoutSummary.text.values.tolist()
+
+    TextWithSummary_summary = [Token_startend(x) for x in TextWithSummary_summary]
+    TextWithSummary_text = [Token_startend(x) for x in TextWithSummary_text]
+    TextWithoutSummary_text = [Token_startend(x) for x in TextWithoutSummary_text]
+
+    docs = TextWithSummary_summary + TextWithSummary_text + TextWithoutSummary_text
     docs = [x.split(' ') for x in docs]
 
     docs_flat = list(chain.from_iterable(docs))
     docs_cnt = Counter(docs_flat)
     print(len(docs_cnt))
-    # 48828
 
-    tokenizer = text.Tokenizer(filters='')
+    sorted_by_value = sorted(docs_cnt.items(), key=lambda kv: kv[1])
+    sorted_value = np.array([x[1] for x in sorted_by_value])
+    plt.hist(sorted_value, log=True)
+    plt.show()
+    plt.hist(sorted_value, range=(0, 100), log=True)
+    plt.show()
+    print('number of tokens more than 10: ', sum(sorted_value > 10))
+    # 24353
+
+    tokenizer = text.Tokenizer(num_words=24353, filters='', oov_token='<UNK>')
     tokenizer.fit_on_texts(docs)
-    TextWithSummary_summary = tokenizer.texts_to_sequences(TextWithSummary.summary.values.tolist())
-    TextWithSummary_text = tokenizer.texts_to_sequences(TextWithSummary.text.values.tolist())
-    TextWithoutSummary_text = tokenizer.texts_to_sequences(TextWithoutSummary.text.values.tolist())
+    TextWithSummary_summary = tokenizer.texts_to_sequences(TextWithSummary_summary)
+    TextWithSummary_text = tokenizer.texts_to_sequences(TextWithSummary_text)
+    TextWithoutSummary_text = tokenizer.texts_to_sequences(TextWithoutSummary_text)
 
     len_summary = [len(x) for x in TextWithSummary_summary]
     len_text = [len(x) for x in TextWithSummary_text + TextWithoutSummary_text]
@@ -107,3 +72,33 @@ if __name__ == "__main__":
     plt.hist(len_summary)
     plt.hist(len_text)
     plt.show()
+
+    # tokenizer.texts_to_sequences([['dfder', '가', '위촉']])
+    # tokenizer.sequences_to_texts([[1, 20, 1]])
+
+    gen_lbl_summary = Generator(TextWithSummary_summary, max_len=200)
+    gen_lbl_text = Generator(TextWithSummary_text, max_len=1000)
+    gen_ulbl_text = Generator(TextWithoutSummary_text, max_len=1000)
+
+    lbl_summary = tf.data.Dataset().from_generator(gen_lbl_summary.gen,
+                                                   output_types=tf.float32,
+                                                   output_shapes=(tf.TensorShape([None, 200, 24353])))
+
+    lbl_text = tf.data.Dataset().from_generator(gen_lbl_text.gen,
+                                                output_types=tf.float32,
+                                                output_shapes=(tf.TensorShape([None, 1000, 24353])))
+
+    ulbl_text = tf.data.Dataset().from_generator(gen_ulbl_text.gen,
+                                                 output_types=tf.float32,
+                                                 output_shapes=(tf.TensorShape([None, 1000, 24353])))
+
+    dcomb = tf.data.Dataset.zip((lbl_summary.repeat(), lbl_text.repeat(), ulbl_text.repeat())).batch(16)
+    iterator = dcomb.make_initializable_iterator()
+    # extract an element
+    next_element = iterator.get_next()
+    with tf.Session() as sess:
+        sess.run(iterator.initializer)
+        for i in range(5):
+            val = sess.run(next_element)
+            print(val)
+
