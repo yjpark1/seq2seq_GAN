@@ -118,3 +118,10 @@ dmypy.json
 .pyre/
 *.xml
 *.iml
+data/abstractive_article_komoran.npy
+data/abstractive_summary_komoran.npy
+data/extractive_article_komoran.npy
+data/extractive_summary_komoran.npy
+data/unlabeled_article_komoran.npy
+data/vocab.csv
+data/vocab.npy

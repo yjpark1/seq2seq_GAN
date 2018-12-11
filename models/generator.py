@@ -21,10 +21,10 @@ class Seq2SeqGenerator:
         self.embedding_units = embedding_units
         self.enc_units = enc_units
         self.dec_units = dec_units
-        #self.batch_size = batch_size
+
         self.max_output_length = H.max_summary_len if namescope is 'generator' else H.max_text_len
-        self._tokenID_start = 0
-        self._tokenID_end = 1
+        self._tokenID_start = 2 # START TOKEN = 2 
+        self._tokenID_end = 3 # END TOKEN = 3
         self.namescope = namescope
 
     def build_model(self, train_inputs, input_lengths, reuse=False, emb_reuse=False):

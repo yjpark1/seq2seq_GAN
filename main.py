@@ -19,15 +19,18 @@ import matplotlib.pyplot as plt
 from models.discriminator import RNNDiscriminator
 from models.generator import Seq2SeqGenerator
 from models.gan import SeqGAN
+import utils.data_file as helper
 
 ## hyperparameters
 from train import hyperparameter as H
 
-## toy example generator
-import utils.simulation as helpers
-
 ###############################################################################
 ## setting hyperparameter
+vocab = H.build_vocab
+labeled_doc = H.labeled_article
+labeled_summary = H.labeled_summary
+unlabeled_doc = H.unlabeled_article
+
 batch_size = H.batch_size
 vocab_size = H.vocab_size
 text_len = H.max_text_len
@@ -45,29 +48,21 @@ def plot_loss(losses):
     plt.legend()
     plt.show()
 
-
-def next_fd(dat, max_len = text_len, vocab_size = vocab_size): 
-    batch = next(dat)
-    batch_seq, seq_len = helpers.batch(batch, max_seq_len=max_len, vocab_size = vocab_size)
-    return batch_seq, seq_len
- 
-    
-
 def generate(model, num_samples=10): ## generate sample function 
-    generated_sample =helpers.random_sequences(length_from=3, length_to=text_len,
-                                               vocab_lower=10, vocab_upper=400,
-                                               batch_size = num_samples)
-    gen_seq, gen_len = next_fd(generated_sample, max_len = text_len)
     
+    gen_seq, gen_len, origin_seq = next(gen_dat)
     sequence = model.sess.run([model.generated_sequence],
                               feed_dict = {model.unlabeled_text: gen_seq,
                                            model.unlabeled_text_lengths: gen_len})
     #shape = (1, num_samples, summary_length, vocab_size)
     
-    sequence = np.argmax(sequence[0], axis = 2) #shape = (num_samples, summary_lenth)
-    
-    ## TODO: detokenize function (idx --> character)
-    return sequence    
+    gen_sequence = np.argmax(sequence[0], axis = 2) #shape = (num_samples, summary_lenth)
+    generated_summary = []
+    for g_seq in gen_sequence:
+         generated_summary.appned(helper.detokenize(g_seq, vocab))
+        
+    return generated_summary, origin_seq
+
 ###############################################################################
 ## build model
 tf.reset_default_graph() 
@@ -76,31 +71,24 @@ init = tf.global_variables_initializer()
 sess = tf.Session()
 scope = tf.get_variable_scope()
 
-discriminator = RNNDiscriminator(emb_scope=scope, num_classes=2, vocab_size=400,
+discriminator = RNNDiscriminator(emb_scope=scope, num_classes=2, vocab_size=H.vocab_size,
                                  embedding_units=64, hidden_units=64)
-generator = Seq2SeqGenerator(emb_scope=scope, namescope='generator', vocab_size=400,
+generator = Seq2SeqGenerator(emb_scope=scope, namescope='generator', vocab_size=H.vocab_size,
                              embedding_units=64, enc_units=256, dec_units=256)
-reconstructor = Seq2SeqGenerator(emb_scope=scope, namescope='reconstructor', vocab_size=400,
+reconstructor = Seq2SeqGenerator(emb_scope=scope, namescope='reconstructor', vocab_size=H.vocab_size,
                                  embedding_units=64, enc_units=256, dec_units=256)
 gan = SeqGAN(sess, discriminator, generator, reconstructor, emb_scope=scope)
 gan.build_gan()
 
 ######################################################################
-print("generate toy example...")
-labeled_dat = helpers.random_sequences(length_from=3, length_to=text_len,
-                                        vocab_lower=10, vocab_upper=400,
-                                        batch_size = batch_size)
-unlabeled_dat =helpers.random_sequences(length_from=3, length_to=text_len,
-                                        vocab_lower=10, vocab_upper=400,
-                                        batch_size = batch_size)
-summary_dat = helpers.random_sequences(length_from=3, length_to=summary_len,
-                                        vocab_lower=10, vocab_upper=400,
-                                        batch_size = batch_size)
+print("load data..")
+label_dat = helper.labeled_article_summary_generator(labeled_doc,labeled_summary, vocab, batch_size)
+unlabel_dat = helper.unlabeled_article_generator(unlabeled_doc, vocab, batch_size)
 
+## sample to generate (random choice)
+gen_dat = helper.random_sample_generator(unlabeled_doc, vocab, 10)
 
 print('start training GAN model')
-
-
 sess.run(init)
 losses = {"d":[], "g":[], "r":[]}
 
@@ -112,9 +100,9 @@ for epoch in range(1, num_epoch+1):
     
     for step in tqdm(range(1, num_steps+1)):
         
-        l_seq, l_len = next_fd(labeled_dat, max_len = text_len, vocab_size = 400)
-        u_seq, u_len = next_fd(unlabeled_dat, max_len = text_len, vocab_size = 400)
-        s_seq, s_len = next_fd(summary_dat, max_len = summary_len, vocab_size = 400)
+        l_seq, l_len, s_seq, s_len = next(label_dat)
+        u_seq, u_len = next(unlabel_dat)
+
         '''
         print("labeled sequence shape: ", l_seq.shape)
         print("unlabeled sequence shape: ", u_seq.shape)
@@ -148,3 +136,4 @@ for epoch in range(1, num_epoch+1):
     if epoch % 10 == 0:
         generated_sample = generate(gan, 1)
         print(generated_sample)
+
