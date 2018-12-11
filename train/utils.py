@@ -17,11 +17,15 @@ class Generator:
         self.x = x
         self.max_len = max_len
 
-    def gen(self):
+    def gen_data(self):
         for b in self.x:
             b = sequence.pad_sequences([b], maxlen=self.max_len, truncating='post', padding='post')
             b = keras.utils.to_categorical(b, num_classes=24353)
-            yield b
+            yield b[0]
+
+    def gen_len(self):
+        for b in self.x:
+            yield len(b)
 
 
 def Token_startend(x):
@@ -80,25 +84,40 @@ if __name__ == "__main__":
     gen_lbl_text = Generator(TextWithSummary_text, max_len=1000)
     gen_ulbl_text = Generator(TextWithoutSummary_text, max_len=1000)
 
-    lbl_summary = tf.data.Dataset().from_generator(gen_lbl_summary.gen,
+    lbl_summary = tf.data.Dataset().from_generator(gen_lbl_summary.gen_data,
                                                    output_types=tf.float32,
-                                                   output_shapes=(tf.TensorShape([None, 200, 24353])))
+                                                   output_shapes=(tf.TensorShape([200, 24353])))
 
-    lbl_text = tf.data.Dataset().from_generator(gen_lbl_text.gen,
+    lbl_text = tf.data.Dataset().from_generator(gen_lbl_text.gen_data,
                                                 output_types=tf.float32,
-                                                output_shapes=(tf.TensorShape([None, 1000, 24353])))
+                                                output_shapes=(tf.TensorShape([1000, 24353])))
 
-    ulbl_text = tf.data.Dataset().from_generator(gen_ulbl_text.gen,
+    ulbl_text = tf.data.Dataset().from_generator(gen_ulbl_text.gen_data,
                                                  output_types=tf.float32,
-                                                 output_shapes=(tf.TensorShape([None, 1000, 24353])))
+                                                 output_shapes=(tf.TensorShape([1000, 24353])))
 
-    dcomb = tf.data.Dataset.zip((lbl_summary.repeat(), lbl_text.repeat(), ulbl_text.repeat())).batch(16)
+    len_lbl_summary = tf.data.Dataset().from_generator(gen_lbl_summary.gen_len,
+                                                       output_types=tf.int32,
+                                                       output_shapes=(tf.TensorShape([])))
+
+    len_lbl_text = tf.data.Dataset().from_generator(gen_lbl_text.gen_len,
+                                                    output_types=tf.int32,
+                                                    output_shapes=(tf.TensorShape([])))
+
+    len_ulbl_text = tf.data.Dataset().from_generator(gen_ulbl_text.gen_len,
+                                                     output_types=tf.int32,
+                                                     output_shapes=(tf.TensorShape([])))
+
+    dcomb = tf.data.Dataset.zip((lbl_summary.repeat(), lbl_text.repeat(), ulbl_text.repeat(),
+                                 len_lbl_summary.repeat(), len_lbl_text.repeat(),
+                                 len_ulbl_text.repeat())).batch(16)
+
     iterator = dcomb.make_initializable_iterator()
     # extract an element
     next_element = iterator.get_next()
     with tf.Session() as sess:
         sess.run(iterator.initializer)
-        for i in range(5):
+        for i in range(1):
             val = sess.run(next_element)
             print(val)
 

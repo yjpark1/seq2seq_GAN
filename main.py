@@ -5,31 +5,29 @@ Created on Wed Dec  5 17:18:02 2018
 @author: HQ
 """
 import os
-#os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
-#os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 import numpy as np
 import tensorflow as tf
 import time
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+from keras.preprocessing import text, sequence
+import pandas as pd
 
 ## local import
 from models.discriminator import RNNDiscriminator
 from models.generator import Seq2SeqGenerator
 from models.gan import SeqGAN
-import utils.data_file as helper
+# import utils.data_file as helper
+from train.utils import Generator, Token_startend
 
 ## hyperparameters
 from train import hyperparameter as H
 
 ###############################################################################
 ## setting hyperparameter
-vocab = H.build_vocab
-labeled_doc = H.labeled_article
-labeled_summary = H.labeled_summary
-unlabeled_doc = H.unlabeled_article
-
 batch_size = H.batch_size
 vocab_size = H.vocab_size
 text_len = H.max_text_len
@@ -40,27 +38,13 @@ num_steps = 1000
 ###############################################################################
 ## define functions
 def plot_loss(losses):
-    plt.figure(figsize = (5,4))
+    plt.figure(figsize=(5, 4))
     plt.plot(losses["d"], label='discriminitive loss')
     plt.plot(losses["g"], label='generative loss')
     plt.plot(losses["r"], label='generative loss')
     plt.legend()
     plt.show()
 
-def generate(model, num_samples=10): ## generate sample function 
-    
-    gen_seq, gen_len, origin_seq = next(gen_dat)
-    sequence = model.sess.run([model.generated_sequence],
-                              feed_dict = {model.unlabeled_text: gen_seq,
-                                           model.unlabeled_text_lengths: gen_len})
-    #shape = (1, num_samples, summary_length, vocab_size)
-    
-    gen_sequence = np.argmax(sequence[0], axis = 2) #shape = (num_samples, summary_lenth)
-    generated_summary = []
-    for g_seq in gen_sequence:
-         generated_summary.appned(helper.detokenize(g_seq, vocab))
-        
-    return generated_summary, origin_seq
 
 ###############################################################################
 ## build model
@@ -73,24 +57,75 @@ scope = tf.get_variable_scope()
 discriminator = RNNDiscriminator(emb_scope=scope, num_classes=2, vocab_size=H.vocab_size,
                                  embedding_units=64, hidden_units=64)
 generator = Seq2SeqGenerator(emb_scope=scope, namescope='generator', vocab_size=H.vocab_size,
-                             embedding_units=64, enc_units=256, dec_units=256)
+                             embedding_units=64, enc_units=128, dec_units=128)
 reconstructor = Seq2SeqGenerator(emb_scope=scope, namescope='reconstructor', vocab_size=H.vocab_size,
-                                 embedding_units=64, enc_units=256, dec_units=256)
+                                 embedding_units=64, enc_units=128, dec_units=128)
 gan = SeqGAN(sess, discriminator, generator, reconstructor, emb_scope=scope)
-gan.build_gan()
+
 
 ######################################################################
 print("load data..")
-label_dat = helper.labeled_article_generator(labeled_doc,vocab, batch_size)
-summary_dat = helper.labeled_summary_generator(labeled_summary, vocab, batch_size)
-unlabel_dat = helper.unlabeled_article_generator(unlabeled_doc, vocab, batch_size)
+TextWithSummary = pd.read_csv('datasets/TextWithSummary.csv', encoding='utf8', dtype=object)
+TextWithoutSummary = pd.read_csv('datasets/TextWithoutSummary.csv', encoding='utf8', dtype=object)
 
-## sample to generate (random choice)
-gen_dat = helper.random_sample_generator(unlabeled_doc, vocab, 10)
+# add <UNK>, <START>, <END>
+TextWithSummary_summary = TextWithSummary.summary.values.tolist()
+TextWithSummary_text = TextWithSummary.text.values.tolist()
+TextWithoutSummary_text = TextWithoutSummary.text.values.tolist()
+
+TextWithSummary_summary = [Token_startend(x) for x in TextWithSummary_summary]
+TextWithSummary_text = [Token_startend(x) for x in TextWithSummary_text]
+TextWithoutSummary_text = [Token_startend(x) for x in TextWithoutSummary_text]
+
+docs = TextWithSummary_summary + TextWithSummary_text + TextWithoutSummary_text
+docs = [x.split(' ') for x in docs]
+
+tokenizer = text.Tokenizer(num_words=24353, filters='', oov_token='<UNK>')
+tokenizer.fit_on_texts(docs)
+TextWithSummary_summary = tokenizer.texts_to_sequences(TextWithSummary_summary)
+TextWithSummary_text = tokenizer.texts_to_sequences(TextWithSummary_text)
+TextWithoutSummary_text = tokenizer.texts_to_sequences(TextWithoutSummary_text)
+
+gen_lbl_summary = Generator(TextWithSummary_summary, max_len=200)
+gen_lbl_text = Generator(TextWithSummary_text, max_len=1000)
+gen_ulbl_text = Generator(TextWithoutSummary_text, max_len=1000)
+
+lbl_summary = tf.data.Dataset().from_generator(gen_lbl_summary.gen_data,
+                                               output_types=tf.float32,
+                                               output_shapes=(tf.TensorShape([200, 24353])))
+
+lbl_text = tf.data.Dataset().from_generator(gen_lbl_text.gen_data,
+                                            output_types=tf.float32,
+                                            output_shapes=(tf.TensorShape([1000, 24353])))
+
+ulbl_text = tf.data.Dataset().from_generator(gen_ulbl_text.gen_data,
+                                             output_types=tf.float32,
+                                             output_shapes=(tf.TensorShape([1000, 24353])))
+
+len_lbl_summary = tf.data.Dataset().from_generator(gen_lbl_summary.gen_len,
+                                                   output_types=tf.int32,
+                                                   output_shapes=(tf.TensorShape([])))
+
+len_lbl_text = tf.data.Dataset().from_generator(gen_lbl_text.gen_len,
+                                                output_types=tf.int32,
+                                                output_shapes=(tf.TensorShape([])))
+
+len_ulbl_text = tf.data.Dataset().from_generator(gen_ulbl_text.gen_len,
+                                                 output_types=tf.int32,
+                                                 output_shapes=(tf.TensorShape([])))
+
+dcomb = tf.data.Dataset.zip((lbl_summary.repeat(), lbl_text.repeat(), ulbl_text.repeat(),
+                             len_lbl_summary.repeat(), len_lbl_text.repeat(),
+                             len_ulbl_text.repeat())).batch(4)
+iterator = dcomb.make_initializable_iterator()
+# extract an element
+next_element = iterator.get_next()
+gan.build_gan(inputs=next_element)
 
 print('start training GAN model')
-sess.run(init)
-losses = {"d":[], "g":[], "r":[]}
+gan.sess.run(init)
+gan.sess.run(iterator.initializer)
+losses = {"d": [], "g": [], "r": []}
 
 for epoch in range(1, num_epoch+1):
     start = time.time()   
@@ -99,25 +134,9 @@ for epoch in range(1, num_epoch+1):
     train_L_R = 0.
     
     for step in tqdm(range(1, num_steps+1)):
-        
-        l_seq, l_len = next(label_dat)
-        s_seq, s_len = next(summary_dat)
-        u_seq, u_len = next(unlabel_dat)
-
-        '''
-        print("labeled sequence shape: ", l_seq.shape)
-        print("unlabeled sequence shape: ", u_seq.shape)
-        print("summary sequence shape: ", s_seq.shape)
-        '''
-
         _, batch_g_loss, batch_d_loss, batch_r_loss = gan.sess.run(
                 [gan.train_op, gan.gen_loss, gan.dis_loss, gan.rec_loss],
-                feed_dict = {gan.labeled_text: l_seq,
-                             gan.labeled_text_lengths: l_len,
-                             gan.unlabeled_text: u_seq,
-                             gan.unlabeled_text_lengths: u_len,
-                             gan.real_summary: s_seq,
-                             gan.real_summary_length: s_len})
+                )
 
         train_L_D += batch_d_loss
         train_L_G += batch_g_loss
@@ -132,9 +151,13 @@ for epoch in range(1, num_epoch+1):
     losses["r"].append(train_L_R)
     
     done = time.time()
-    print('Time:',np.round(done-start,3), 'Epoch:', epoch,'| D loss:',train_L_D,'|G loss:', train_L_G,'|R loss:', train_L_R)
+    print('Time: ', np.round(done-start, 3),
+          ' Epoch:', epoch,
+          ' | D loss:', train_L_D,
+          ' | G loss:', train_L_G,
+          ' | R loss:', train_L_R)
 
-    if epoch % 10 == 0:
-        generated_sample = generate(gan, 1)
-        print(generated_sample)
+    # if epoch % 10 == 0:
+    #     generated_sample = generate(gan, 1)
+    #     print(generated_sample)
 
