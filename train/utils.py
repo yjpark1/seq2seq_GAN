@@ -7,6 +7,7 @@ from collections import Counter
 from itertools import chain
 import matplotlib.pyplot as plt
 import tensorflow as tf
+from train import hyperparameter as H
 import os
 # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
@@ -20,7 +21,7 @@ class Generator:
     def gen_data(self):
         for b in self.x:
             b = sequence.pad_sequences([b], maxlen=self.max_len, truncating='post', padding='post')
-            b = keras.utils.to_categorical(b, num_classes=24353)
+            b = keras.utils.to_categorical(b, num_classes=H.vocab_size)
             yield b[0]
 
     def gen_len(self):
@@ -29,10 +30,11 @@ class Generator:
 
 
 def Token_startend(x):
-    return '<START> ' + x + '<END>'
+    return '<START> ' + x + ' <END>'
 
 
 if __name__ == "__main__":
+    # <test code>
     TextWithSummary = pd.read_csv('datasets/TextWithSummary.csv', encoding='utf8', dtype=object)
     TextWithoutSummary = pd.read_csv('datasets/TextWithoutSummary.csv', encoding='utf8', dtype=object)
 

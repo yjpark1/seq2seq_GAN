@@ -15,7 +15,7 @@ from train import hyperparameter as H
 
 class Seq2SeqGenerator:
     def __init__(self, emb_scope, namescope, vocab_size,
-                 embedding_units, enc_units, dec_units):
+                 embedding_units, enc_units, dec_units, tokenizer):
         self.emb_scope = emb_scope
         self.vocab_size = vocab_size
         self.embedding_units = embedding_units
@@ -23,8 +23,8 @@ class Seq2SeqGenerator:
         self.dec_units = dec_units
 
         self.max_output_length = H.max_summary_len if namescope is 'generator' else H.max_text_len
-        self._tokenID_start = 2 # START TOKEN = 2 
-        self._tokenID_end = 3 # END TOKEN = 3
+        self._tokenID_start = tokenizer.word_index['<start>']
+        self._tokenID_end = tokenizer.word_index['<end>']
         self.namescope = namescope
 
     def build_model(self, train_inputs, input_lengths, reuse=False, emb_reuse=False):

@@ -20,8 +20,11 @@ import pandas as pd
 from models.discriminator import RNNDiscriminator
 from models.generator import Seq2SeqGenerator
 from models.gan import SeqGAN
-# import utils.data_file as helper
+# from train.utils import (lbl_summary, lbl_text, ulbl_text,
+#                          len_lbl_summary, len_lbl_text,
+#                          len_ulbl_text, tokenizer)
 from train.utils import Generator, Token_startend
+
 
 ## hyperparameters
 from train import hyperparameter as H
@@ -34,7 +37,7 @@ text_len = H.max_text_len
 summary_len = H.max_summary_len
 
 num_epoch = 100
-num_steps = 1000
+num_steps = 500
 ###############################################################################
 ## define functions
 def plot_loss(losses):
@@ -46,24 +49,8 @@ def plot_loss(losses):
     plt.show()
 
 
-###############################################################################
-## build model
-tf.reset_default_graph() 
-
-init = tf.global_variables_initializer()
-sess = tf.Session()
-scope = tf.get_variable_scope()
-
-discriminator = RNNDiscriminator(emb_scope=scope, num_classes=2, vocab_size=H.vocab_size,
-                                 embedding_units=64, hidden_units=64)
-generator = Seq2SeqGenerator(emb_scope=scope, namescope='generator', vocab_size=H.vocab_size,
-                             embedding_units=64, enc_units=128, dec_units=128)
-reconstructor = Seq2SeqGenerator(emb_scope=scope, namescope='reconstructor', vocab_size=H.vocab_size,
-                                 embedding_units=64, enc_units=128, dec_units=128)
-gan = SeqGAN(sess, discriminator, generator, reconstructor, emb_scope=scope)
-
-
 ######################################################################
+# tokenizer
 print("load data..")
 TextWithSummary = pd.read_csv('datasets/TextWithSummary.csv', encoding='utf8', dtype=object)
 TextWithoutSummary = pd.read_csv('datasets/TextWithoutSummary.csv', encoding='utf8', dtype=object)
@@ -80,27 +67,47 @@ TextWithoutSummary_text = [Token_startend(x) for x in TextWithoutSummary_text]
 docs = TextWithSummary_summary + TextWithSummary_text + TextWithoutSummary_text
 docs = [x.split(' ') for x in docs]
 
-tokenizer = text.Tokenizer(num_words=24353, filters='', oov_token='<UNK>')
+tokenizer = text.Tokenizer(num_words=H.vocab_size, filters='', oov_token='<UNK>')
 tokenizer.fit_on_texts(docs)
+
 TextWithSummary_summary = tokenizer.texts_to_sequences(TextWithSummary_summary)
 TextWithSummary_text = tokenizer.texts_to_sequences(TextWithSummary_text)
 TextWithoutSummary_text = tokenizer.texts_to_sequences(TextWithoutSummary_text)
 
-gen_lbl_summary = Generator(TextWithSummary_summary, max_len=200)
-gen_lbl_text = Generator(TextWithSummary_text, max_len=1000)
-gen_ulbl_text = Generator(TextWithoutSummary_text, max_len=1000)
+###############################################################################
+## build model
+tf.reset_default_graph()
+sess = tf.Session()
+scope = tf.get_variable_scope()
+
+discriminator = RNNDiscriminator(emb_scope=scope, num_classes=2, vocab_size=H.vocab_size,
+                                 embedding_units=H.embedding_units, hidden_units=64)
+generator = Seq2SeqGenerator(emb_scope=scope, namescope='generator', vocab_size=H.vocab_size,
+                             embedding_units=H.embedding_units, enc_units=H.rnn_units, dec_units=H.rnn_units,
+                             tokenizer=tokenizer)
+reconstructor = Seq2SeqGenerator(emb_scope=scope, namescope='reconstructor', vocab_size=H.vocab_size,
+                                 embedding_units=H.embedding_units, enc_units=H.rnn_units, dec_units=H.rnn_units,
+                                 tokenizer=tokenizer)
+gan = SeqGAN(sess, discriminator, generator, reconstructor, emb_scope=scope)
+
+
+######################################################################
+# train
+gen_lbl_summary = Generator(TextWithSummary_summary, max_len=H.max_summary_len)
+gen_lbl_text = Generator(TextWithSummary_text, max_len=H.max_text_len)
+gen_ulbl_text = Generator(TextWithoutSummary_text, max_len=H.max_text_len)
 
 lbl_summary = tf.data.Dataset().from_generator(gen_lbl_summary.gen_data,
                                                output_types=tf.float32,
-                                               output_shapes=(tf.TensorShape([200, 24353])))
+                                               output_shapes=(tf.TensorShape([H.max_summary_len, H.vocab_size])))
 
 lbl_text = tf.data.Dataset().from_generator(gen_lbl_text.gen_data,
                                             output_types=tf.float32,
-                                            output_shapes=(tf.TensorShape([1000, 24353])))
+                                            output_shapes=(tf.TensorShape([H.max_text_len, H.vocab_size])))
 
 ulbl_text = tf.data.Dataset().from_generator(gen_ulbl_text.gen_data,
                                              output_types=tf.float32,
-                                             output_shapes=(tf.TensorShape([1000, 24353])))
+                                             output_shapes=(tf.TensorShape([H.max_text_len, H.vocab_size])))
 
 len_lbl_summary = tf.data.Dataset().from_generator(gen_lbl_summary.gen_len,
                                                    output_types=tf.int32,
@@ -114,17 +121,21 @@ len_ulbl_text = tf.data.Dataset().from_generator(gen_ulbl_text.gen_len,
                                                  output_types=tf.int32,
                                                  output_shapes=(tf.TensorShape([])))
 
-dcomb = tf.data.Dataset.zip((lbl_summary.repeat(), lbl_text.repeat(), ulbl_text.repeat(),
-                             len_lbl_summary.repeat(), len_lbl_text.repeat(),
-                             len_ulbl_text.repeat())).batch(4)
+dcomb = tf.data.Dataset.zip({'real_summary': lbl_summary.repeat(),
+                             'labeled_text': lbl_text.repeat(),
+                             'unlabeled_text': ulbl_text.repeat(),
+                             'real_summary_len': len_lbl_summary.repeat(),
+                             'labeled_text_len': len_lbl_text.repeat(),
+                             'unlabeled_text_len': len_ulbl_text.repeat()}).batch(H.batch_size)
+
 iterator = dcomb.make_initializable_iterator()
 # extract an element
 next_element = iterator.get_next()
 gan.build_gan(inputs=next_element)
 
 print('start training GAN model')
-gan.sess.run(init)
 gan.sess.run(iterator.initializer)
+
 losses = {"d": [], "g": [], "r": []}
 
 for epoch in range(1, num_epoch+1):
@@ -157,7 +168,23 @@ for epoch in range(1, num_epoch+1):
           ' | G loss:', train_L_G,
           ' | R loss:', train_L_R)
 
-    # if epoch % 10 == 0:
-    #     generated_sample = generate(gan, 1)
-    #     print(generated_sample)
+    ckpt_path = gan.saver.save(gan.sess, "saved/", epoch)
+
+    if epoch % 1 == 0:
+        sequence = gan.sess.run([gan.generated_sequence],)[0]
+        # shape = (batch, num_samples, summary_length, vocab_size)
+        sequence = np.argmax(sequence, axis=2)
+        # shape = (batch, summary_lenth)
+        sequence = tokenizer.sequences_to_texts(sequence)
+        print(sequence)
+
+        f = open("fake_summary_{}.txt".format(epoch), 'w')
+        for fake_summary in sequence:
+            fake_summary = fake_summary + '\n'
+            f.write(fake_summary)
+        f.close()
+
+
+
+
 
