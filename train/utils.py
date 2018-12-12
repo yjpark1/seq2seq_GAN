@@ -30,7 +30,7 @@ class Generator:
 
 
 def Token_startend(x):
-    return '<START> ' + x + ' <END>'
+    return x + ' <END>'
 
 
 if __name__ == "__main__":

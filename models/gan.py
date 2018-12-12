@@ -101,10 +101,14 @@ class SeqGAN:
         self.rec_op = self.train_operator(loss_scope='loss/reconstructor', loss=rec_loss, weights=r_weights)
         self.gen_op = self.train_operator(loss_scope='loss/generator', loss=gen_loss, weights=g_weights)
 
+        # test operator
+        # self.test_op = self.train_operator(loss_scope='loss/reconstructor', loss=r_t_loss, weights=r_weights)
+        # self.out = [r_target_seq, labeled_text_target]
+        # self.loss = r_t_loss
+
         # define train operator
-        # self.step_op = self._time.assign(self._time + 1)
         self.train_op = tf.group(self.gen_op, self.dis_op, self.rec_op)
-        # self.summary_op = tf.summary.merge_all()
+        # self.train_op = tf.group(self.test_op)
         self.saver = tf.train.Saver()
         self.sess.run(tf.global_variables_initializer())
         print('build GAN model done!')

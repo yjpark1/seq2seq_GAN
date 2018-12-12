@@ -13,16 +13,13 @@ import tensorflow as tf
 import time
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-from keras.preprocessing import text, sequence
+from keras.preprocessing import text
 import pandas as pd
 
 ## local import
 from models.discriminator import RNNDiscriminator
 from models.generator import Seq2SeqGenerator
 from models.gan import SeqGAN
-# from train.utils import (lbl_summary, lbl_text, ulbl_text,
-#                          len_lbl_summary, len_lbl_text,
-#                          len_ulbl_text, tokenizer)
 from train.utils import Generator, Token_startend
 
 
@@ -69,6 +66,7 @@ docs = [x.split(' ') for x in docs]
 
 tokenizer = text.Tokenizer(num_words=H.vocab_size, filters='', oov_token='<UNK>')
 tokenizer.fit_on_texts(docs)
+tokenizer.index_word[0] = '<PAD>'
 
 TextWithSummary_summary = tokenizer.texts_to_sequences(TextWithSummary_summary)
 TextWithSummary_text = tokenizer.texts_to_sequences(TextWithSummary_text)
