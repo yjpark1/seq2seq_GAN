@@ -12,14 +12,17 @@ def get_scope_variables(scope):
 
 class SeqGAN:
     def __init__(self, sess, discriminator, generator, reconstructor, emb_scope,
-                 learning_rate=0.001):
+                 d_lr = 0.00001, g_lr = 0.001, r_lr = 0.001, alpha = 0.001):
         self.sess = sess
         self.D = discriminator
         self.G = generator
         self.R = reconstructor
 
         # hyperparameters
-        self.lr = learning_rate
+        self.d_lr = d_lr
+        self.g_lr = g_lr
+        self.r_lr = r_lr
+        self.alpha = alpha
 
         # training parameter        
         #self.batch_size = H.batch_size
@@ -70,8 +73,11 @@ class SeqGAN:
         g_weights = get_scope_variables('generator') + get_scope_variables('embedding')
 
         # loss: discriminator
-        d_r_loss = -tf.reduce_mean(tf.log(tf.clip_by_value(d_real_preds, 1e-7, 1. - 1e-7)))  # r_preds -> 1.
-        d_f_loss = -tf.reduce_mean(tf.log(1 - tf.clip_by_value(d_fake_preds, 1e-7, 1. - 1e-7)))  # g_preds -> 0.
+        #d_r_loss = -tf.reduce_mean(tf.log(tf.clip_by_value(d_real_preds, 1e-7, 1. - 1e-7)))  # r_preds -> 1.
+        #d_f_loss = -tf.reduce_mean(tf.log(1 - tf.clip_by_value(d_fake_preds, 1e-7, 1. - 1e-7)))  # g_preds -> 0.
+        d_r_loss = -tf.reduce_mean(d_real_logits)
+        d_f_loss = tf.reduce_mean(d_fake_logits)
+
         dis_loss = d_r_loss + d_f_loss
 
         # loss: reconstructor
@@ -79,27 +85,30 @@ class SeqGAN:
         unlabeled_text_target = tf.math.argmax(self.unlabeled_text, axis=-1)
 
         # pad output
-        r_real_logits = dynamic_time_pad(r_real_logits, H.max_text_len, batch_size)
+#        r_real_logits = dynamic_time_pad(r_real_logits, H.max_text_len, batch_size)
         r_fake_logits = dynamic_time_pad(r_fake_logits, H.max_text_len, batch_size)
         r_target_logits = dynamic_time_pad(r_target_logits, H.max_text_len, batch_size)
 
-        r_r_loss = tf.contrib.seq2seq.sequence_loss(r_real_logits, labeled_text_target, weight_l_txt)
+#        r_r_loss = tf.contrib.seq2seq.sequence_loss(r_real_logits, labeled_text_target, weight_l_txt)
         r_f_loss = tf.contrib.seq2seq.sequence_loss(r_fake_logits, unlabeled_text_target, weight_u_txt)
         r_t_loss = tf.contrib.seq2seq.sequence_loss(r_target_logits, labeled_text_target, weight_l_txt)
 
-        rec_loss = r_r_loss + r_f_loss + r_t_loss
-
+        #rec_loss = r_r_loss + r_f_loss + r_t_loss
+        rec_loss = r_t_loss + r_f_loss
         # loss: generator
-        gen_loss = r_f_loss - d_f_loss
+        gen_loss = self.alpha * r_f_loss - d_f_loss
         
         self.dis_loss = dis_loss
         self.gen_loss = gen_loss
         self.rec_loss = rec_loss
                 
         # optimization operator
-        self.dis_op = self.train_operator(loss_scope='loss/discriminator', loss=dis_loss, weights=d_weights)
-        self.rec_op = self.train_operator(loss_scope='loss/reconstructor', loss=rec_loss, weights=r_weights)
-        self.gen_op = self.train_operator(loss_scope='loss/generator', loss=gen_loss, weights=g_weights)
+        self.dis_op = self.train_operator(loss_scope='loss/discriminator', loss=dis_loss, weights=d_weights,
+                                          lr = self.d_lr, regul = True)
+        self.rec_op = self.train_operator(loss_scope='loss/reconstructor', loss=rec_loss, weights=r_weights,
+                                          lr=self.r_lr, regul=True)
+        self.gen_op = self.train_operator(loss_scope='loss/generator', loss=gen_loss, weights=g_weights,
+                                          lr=self.g_lr, regul=True)
 
         # test operator
         # self.test_op = self.train_operator(loss_scope='loss/reconstructor', loss=r_t_loss, weights=r_weights)
@@ -113,13 +122,18 @@ class SeqGAN:
         self.sess.run(tf.global_variables_initializer())
         print('build GAN model done!')
 
-    def train_operator(self, loss_scope, loss, weights):
+    def train_operator(self, loss_scope, loss, weights, lr, regul = None):
         with tf.variable_scope(loss_scope):
             # optimizer
-            optim = tf.train.AdamOptimizer(learning_rate=self.lr)
+
+            optim = tf.train.AdamOptimizer(learning_rate=lr, beta1=0.5)
+
+            if regul is not None:
+                _loss = sum([tf.nn.l2_loss(w) for w in weights]) * 1e-4
+                loss = loss + _loss
 
             gvs = optim.compute_gradients(loss, weights)
-            capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs if grad is not None]
+            capped_gvs = [(tf.clip_by_value(grad, -.25, .25), var) for grad, var in gvs if grad is not None]
             op_train = optim.apply_gradients(capped_gvs)
 
             # update
