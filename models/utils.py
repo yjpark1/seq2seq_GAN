@@ -83,7 +83,7 @@ class CustomGreedyEmbeddingHelper(Helper):
         del time  # unused by next_inputs_fn
         # gumbel trick
         # http://anotherdatum.com/gumbel-gan.html
-        dist = tfp.distributions.RelaxedOneHotCategorical(1e-2, logits=outputs)
+        dist = tfp.distributions.RelaxedOneHotCategorical(temperature=1e-1, logits=outputs)
         outputs = dist.sample()
 
         finished = math_ops.equal(sample_ids, self._end_token)

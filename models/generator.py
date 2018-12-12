@@ -40,7 +40,7 @@ class Seq2SeqGenerator:
             (logit, sample_id), _, _ = self.build_decoder(encoder_outputs, encoder_states,
                                                           input_lengths=input_lengths)
             # gumbel trick
-            dist = tfp.distributions.RelaxedOneHotCategorical(1e-2, logits=logit)
+            dist = tfp.distributions.RelaxedOneHotCategorical(temperature=1e-1, logits=logit)
             generate_sequence = dist.sample()
             
             if self.namescope is 'generator':

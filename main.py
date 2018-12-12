@@ -57,6 +57,10 @@ TextWithSummary_summary = TextWithSummary.summary.values.tolist()
 TextWithSummary_text = TextWithSummary.text.values.tolist()
 TextWithoutSummary_text = TextWithoutSummary.text.values.tolist()
 
+# filter short article out
+TextWithoutSummary_text = [x for x in TextWithoutSummary_text if len(x) > H.max_summary_len]
+
+# add <end> token
 TextWithSummary_summary = [Token_startend(x) for x in TextWithSummary_summary]
 TextWithSummary_text = [Token_startend(x) for x in TextWithSummary_text]
 TextWithoutSummary_text = [Token_startend(x) for x in TextWithoutSummary_text]
