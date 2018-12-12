@@ -2,11 +2,8 @@
 https://github.com/sminocha/text-generation-GAN/blob/master/model.py
 """
 import tensorflow as tf
-from models.utils import dynamic_time_pad, dynamic_padded_weight
-from models.discriminator import RNNDiscriminator
-from models.generator import Seq2SeqGenerator
+from models.utils import dynamic_time_pad
 from train import hyperparameter as H
-import utils.data_file
 
 
 def get_scope_variables(scope):
@@ -37,22 +34,21 @@ class SeqGAN:
         self.labeled_text = inputs['labeled_text']
         self.labeled_text_lengths = inputs['labeled_text_len']
         batch_size = tf.shape(self.labeled_text)[0]
-        weight_l_txt = dynamic_padded_weight(self.labeled_text, self.labeled_text_lengths, H.max_text_len, batch_size)
+        weight_l_txt = tf.sequence_mask(self.labeled_text_lengths, H.max_text_len, dtype=tf.float32)
 
         # placeholder: unlabeled text
         self.unlabeled_text = inputs['unlabeled_text']
         self.unlabeled_text_lengths = inputs['unlabeled_text_len']
-        weight_u_txt = dynamic_padded_weight(self.unlabeled_text, self.unlabeled_text_lengths, H.max_text_len, batch_size)
-
+        weight_u_txt = tf.sequence_mask(self.unlabeled_text_lengths, H.max_text_len, dtype=tf.float32)
         # placeholder: summary
         self.real_summary = inputs['real_summary']
         self.real_summary_length = inputs['real_summary_len']
 
         # build generator
-        g_real_probs, g_real_seq = self.G.build_model(self.labeled_text, self.labeled_text_lengths,
-                                                      reuse=False, emb_reuse=False)
-        g_fake_probs, g_fake_seq = self.G.build_model(self.unlabeled_text, self.unlabeled_text_lengths,
-                                                      reuse=True, emb_reuse=True)
+        g_real_logits, g_real_seq = self.G.build_model(self.labeled_text, self.labeled_text_lengths,
+                                                       reuse=False, emb_reuse=False)
+        g_fake_logits, g_fake_seq = self.G.build_model(self.unlabeled_text, self.unlabeled_text_lengths,
+                                                       reuse=True, emb_reuse=True)
         
         self.generated_sequence = g_fake_seq
         
@@ -61,12 +57,12 @@ class SeqGAN:
         d_fake_logits, d_fake_preds = self.D.build_model(g_fake_seq, reuse=True)
 
         # build reconstructor
-        r_real_probs, r_real_seq = self.R.build_model(g_real_probs, self.real_summary_length,
-                                                      reuse=False, emb_reuse=True)
-        r_target_probs, r_target_seq = self.R.build_model(self.real_summary, self.real_summary_length,
-                                                          reuse=True, emb_reuse=True)
-        r_fake_probs, r_fake_seq = self.R.build_model(g_fake_probs, self.real_summary_length,
-                                                      reuse=True, emb_reuse=True)
+        r_real_logits, r_real_seq = self.R.build_model(g_real_seq, self.real_summary_length,
+                                                       reuse=False, emb_reuse=True)
+        r_target_logits, r_target_seq = self.R.build_model(self.real_summary, self.real_summary_length,
+                                                           reuse=True, emb_reuse=True)
+        r_fake_logits, r_fake_seq = self.R.build_model(g_fake_seq, self.real_summary_length,
+                                                       reuse=True, emb_reuse=True)
 
         # get trainable parameters
         d_weights = get_scope_variables('discriminator') + get_scope_variables('embedding')
@@ -83,13 +79,13 @@ class SeqGAN:
         unlabeled_text_target = tf.math.argmax(self.unlabeled_text, axis=-1)
 
         # pad output
-        r_real_probs = dynamic_time_pad(r_real_probs, H.max_text_len, batch_size)
-        r_fake_probs = dynamic_time_pad(r_fake_probs, H.max_text_len, batch_size)
-        r_target_probs = dynamic_time_pad(r_target_probs, H.max_text_len, batch_size)
+        r_real_logits = dynamic_time_pad(r_real_logits, H.max_text_len, batch_size)
+        r_fake_logits = dynamic_time_pad(r_fake_logits, H.max_text_len, batch_size)
+        r_target_logits = dynamic_time_pad(r_target_logits, H.max_text_len, batch_size)
 
-        r_r_loss = tf.contrib.seq2seq.sequence_loss(r_real_probs, labeled_text_target, weight_l_txt)
-        r_f_loss = tf.contrib.seq2seq.sequence_loss(r_fake_probs, unlabeled_text_target, weight_u_txt)
-        r_t_loss = tf.contrib.seq2seq.sequence_loss(r_target_probs, labeled_text_target, weight_l_txt)
+        r_r_loss = tf.contrib.seq2seq.sequence_loss(r_real_logits, labeled_text_target, weight_l_txt)
+        r_f_loss = tf.contrib.seq2seq.sequence_loss(r_fake_logits, unlabeled_text_target, weight_u_txt)
+        r_t_loss = tf.contrib.seq2seq.sequence_loss(r_target_logits, labeled_text_target, weight_l_txt)
 
         rec_loss = r_r_loss + r_f_loss + r_t_loss
 
@@ -118,11 +114,15 @@ class SeqGAN:
             # optimizer
             optim = tf.train.AdamOptimizer(learning_rate=self.lr)
 
-            # update
-            optim = optim.minimize(loss, var_list=weights)
-            #tf.summary.scalar(loss_scope, loss)
+            gvs = optim.compute_gradients(loss, weights)
+            capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs if grad is not None]
+            op_train = optim.apply_gradients(capped_gvs)
 
-        return optim
+            # update
+            # optim = optim.minimize(loss, var_list=weights)
+            # tf.summary.scalar(loss_scope, loss)
+
+        return op_train
     
 '''
 if __name__ == '__main__':

@@ -5,6 +5,7 @@ Created on Wed Dec  5 17:18:02 2018
 @author: HQ
 """
 import os
+
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
@@ -25,7 +26,6 @@ from models.gan import SeqGAN
 #                          len_ulbl_text, tokenizer)
 from train.utils import Generator, Token_startend
 
-
 ## hyperparameters
 from train import hyperparameter as H
 
@@ -38,6 +38,8 @@ summary_len = H.max_summary_len
 
 num_epoch = 100
 num_steps = 500
+
+
 ###############################################################################
 ## define functions
 def plot_loss(losses):
@@ -90,7 +92,6 @@ reconstructor = Seq2SeqGenerator(emb_scope=scope, namescope='reconstructor', voc
                                  tokenizer=tokenizer)
 gan = SeqGAN(sess, discriminator, generator, reconstructor, emb_scope=scope)
 
-
 ######################################################################
 # train
 gen_lbl_summary = Generator(TextWithSummary_summary, max_len=H.max_summary_len)
@@ -131,67 +132,41 @@ dcomb = tf.data.Dataset.zip({'real_summary': lbl_summary.repeat(),
 iterator = dcomb.make_initializable_iterator()
 # extract an element
 next_element = iterator.get_next()
-gan.build_gan(inputs=next_element)
+# (g_real, g_fake, d_real, d_fake, r_real, r_target, r_fake,
+#  d_loss, r_loss) = gan.build_gan(inputs=next_element)
+
+r_real_logits, weight_l_txt, labeled_text, labeled_text_lengths = gan.build_gan(inputs=next_element)
+gan.sess.run(iterator.initializer)
+a = gan.sess.run([r_real_logits, weight_l_txt, labeled_text, labeled_text_lengths])
+a[0].shape
+a[1].shape
+a[2].shape
+a[3].shape
+
+np.sum(a[1], axis=-1)
+a[1][0]
 
 print('start training GAN model')
 gan.sess.run(iterator.initializer)
 
 losses = {"d": [], "g": [], "r": []}
 
-for epoch in range(1, num_epoch+1):
-    start = time.time()   
-    train_L_D = 0.
-    train_L_G = 0.
-    train_L_R = 0.
+import math
 
-    for step in tqdm(range(1, num_steps+1)):
-        _, batch_g_loss, batch_d_loss, batch_r_loss = gan.sess.run(
-                [gan.train_op, gan.gen_loss, gan.dis_loss, gan.rec_loss]
-                )
-        print('D: {:.3f}, G: {:.3f}, R: {:.3f}'.format(batch_d_loss, batch_g_loss, batch_r_loss))
+for step in tqdm(range(1, num_steps + 1)):
+    # (_, batch_g_loss, batch_d_loss, batch_r_loss,
+    #  batch_g_real, batch_g_fake, batch_d_real, batch_d_fake,
+    #  batch_r_real, batch_r_target, batch_r_fake, b_d_loss, b_r_loss
+    #  ) = gan.sess.run(
+    #     [gan.train_op, gan.gen_loss, gan.dis_loss, gan.rec_loss] +
+    #     [g_real, g_fake, d_real, d_fake, r_real, r_target, r_fake, d_loss, r_loss],
+    # )
+    print('D: {:.3f}, G: {:.3f}, R: {:.3f}'.format(batch_d_loss, batch_g_loss, batch_r_loss))
+    stop = False
+    for a in b_d_loss + b_r_loss:
+        if math.isnan(a):
+            stop = True
+            break
+    if stop:
+        break
 
-        train_L_D += batch_d_loss
-        train_L_G += batch_g_loss
-        train_L_R += batch_r_loss
-    
-    train_L_D /= num_steps
-    train_L_G /= num_steps
-    train_L_R /= num_steps
-    
-    losses["d"].append(train_L_D)
-    losses["g"].append(train_L_G)
-    losses["r"].append(train_L_R)
-    
-    done = time.time()
-    print('Time: ', np.round(done-start, 3),
-          ' Epoch:', epoch,
-          ' | D loss:', train_L_D,
-          ' | G loss:', train_L_G,
-          ' | R loss:', train_L_R)
-
-    ckpt_path = gan.saver.save(gan.sess, "saved/", epoch)
-
-    if epoch % 1 == 0:
-        test_out = gan.sess.run([gan.generated_sequence, next_element['unlabeled_text']],)
-        sequence = test_out[0]
-        origin = test_out[1]
-        # shape = (batch, num_samples, summary_length, vocab_size)
-        sequence = np.argmax(sequence, axis=2)
-        # shape = (batch, summary_lenth)
-        sequence = tokenizer.sequences_to_texts(sequence)
-        print(sequence)
-
-        origin = np.argmax(origin, axis=2)
-        origin = tokenizer.sequences_to_texts(origin)
-
-        f = open("fake_summary_{}.txt".format(epoch), 'w')
-        for fake_summary in sequence:
-            fake_summary = fake_summary + '\n'
-            f.write(fake_summary)
-
-        f.write('<origin>\n\n\n')
-        for txt in origin:
-            txt = txt + '\n'
-            f.write(txt)
-
-        f.close()

@@ -37,10 +37,10 @@ class Seq2SeqGenerator:
 
             # seq2seq encoder & decoder
             encoder_outputs, encoder_states = self.build_encoder(embed, input_lengths)
-            (probs, sample_id), _, _ = self.build_decoder(encoder_outputs, encoder_states,
+            (logit, sample_id), _, _ = self.build_decoder(encoder_outputs, encoder_states,
                                                           input_lengths=input_lengths)
             # gumbel trick
-            dist = tfp.distributions.RelaxedOneHotCategorical(1e-2, probs=probs)
+            dist = tfp.distributions.RelaxedOneHotCategorical(1e-2, logits=logit)
             generate_sequence = dist.sample()
             
             if self.namescope is 'generator':
@@ -48,7 +48,7 @@ class Seq2SeqGenerator:
             else:
                 print("build reconstructor done!")
                 
-        return probs, generate_sequence
+        return logit, generate_sequence
 
     def embeddings(self, inputs, emb_scope, reuse):
         with tf.variable_scope(emb_scope, reuse=reuse):
@@ -93,7 +93,8 @@ class Seq2SeqGenerator:
                                                       end_token=self._tokenID_end)
 
             # <projection layer>
-            projection_layer = tf.layers.Dense(self.vocab_size, activation='softmax', use_bias=False)
+            # projection_layer = tf.layers.Dense(self.vocab_size, activation='softmax')
+            projection_layer = tf.layers.Dense(self.vocab_size)
             # <dynamic decoding>
             decoder = tf.contrib.seq2seq.BasicDecoder(decoder_cell, pred_helper, decoder_initial_state,
                                                       output_layer=projection_layer)
