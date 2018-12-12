@@ -61,7 +61,7 @@ TextWithSummary_summary = [Token_startend(x) for x in TextWithSummary_summary]
 TextWithSummary_text = [Token_startend(x) for x in TextWithSummary_text]
 TextWithoutSummary_text = [Token_startend(x) for x in TextWithoutSummary_text]
 
-docs = TextWithSummary_summary + TextWithSummary_text + TextWithoutSummary_text
+docs = TextWithSummary_summary + TextWithSummary_text + TextWithoutSummary_text + ['<start>']
 docs = [x.split(' ') for x in docs]
 
 tokenizer = text.Tokenizer(num_words=H.vocab_size, filters='', oov_token='<UNK>')
@@ -146,7 +146,7 @@ for epoch in range(1, num_epoch+1):
         _, batch_g_loss, batch_d_loss, batch_r_loss = gan.sess.run(
                 [gan.train_op, gan.gen_loss, gan.dis_loss, gan.rec_loss]
                 )
-        print('D: {:.3f}, G: {:.3f}, R: {:.3f}'.format(batch_d_loss, batch_g_loss, batch_r_loss))
+        # print('D: {:.3f}, G: {:.3f}, R: {:.3f}'.format(batch_d_loss, batch_g_loss, batch_r_loss))
 
         train_L_D += batch_d_loss
         train_L_G += batch_g_loss

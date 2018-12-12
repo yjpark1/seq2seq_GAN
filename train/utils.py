@@ -14,7 +14,7 @@ import os
 
 
 class Generator:
-    def __init__(self, x, max_len=1000):
+    def __init__(self, x, max_len=800):
         self.x = x
         self.max_len = max_len
 
@@ -47,7 +47,7 @@ if __name__ == "__main__":
     TextWithSummary_text = [Token_startend(x) for x in TextWithSummary_text]
     TextWithoutSummary_text = [Token_startend(x) for x in TextWithoutSummary_text]
 
-    docs = TextWithSummary_summary + TextWithSummary_text + TextWithoutSummary_text
+    docs = TextWithSummary_summary + TextWithSummary_text + TextWithoutSummary_text + ['<start>']
     docs = [x.split(' ') for x in docs]
 
     docs_flat = list(chain.from_iterable(docs))
