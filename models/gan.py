@@ -74,8 +74,8 @@ class SeqGAN:
         g_weights = get_scope_variables('generator') + get_scope_variables('embedding')
 
         # loss: discriminator
-        d_r_loss = -tf.reduce_mean(tf.log(tf.clip_by_value(d_real_preds, 1e-8, 1. - 1e-8)))  # r_preds -> 1.
-        d_f_loss = -tf.reduce_mean(tf.log(1 - tf.clip_by_value(d_fake_preds, 1e-8, 1. - 1e-8)))  # g_preds -> 0.
+        d_r_loss = -tf.reduce_mean(tf.log(tf.clip_by_value(d_real_preds, 1e-7, 1. - 1e-7)))  # r_preds -> 1.
+        d_f_loss = -tf.reduce_mean(tf.log(1 - tf.clip_by_value(d_fake_preds, 1e-7, 1. - 1e-7)))  # g_preds -> 0.
         dis_loss = d_r_loss + d_f_loss
 
         # loss: reconstructor

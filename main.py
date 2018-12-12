@@ -148,7 +148,7 @@ for epoch in range(1, num_epoch+1):
         _, batch_g_loss, batch_d_loss, batch_r_loss = gan.sess.run(
                 [gan.train_op, gan.gen_loss, gan.dis_loss, gan.rec_loss],
                 )
-
+        print('D: {:.3f}, G: {:.3f}, R: {:.3f}'.format(batch_d_loss, batch_g_loss, batch_r_loss))
         train_L_D += batch_d_loss
         train_L_G += batch_g_loss
         train_L_R += batch_r_loss
@@ -194,8 +194,3 @@ for epoch in range(1, num_epoch+1):
             f.write(txt)
 
         f.close()
-
-
-
-
-
