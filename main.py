@@ -170,7 +170,7 @@ for epoch in range(1, num_epoch+1):
     ckpt_path = gan.saver.save(gan.sess, "saved/", epoch)
 
     if epoch % 1 == 0:
-        test_out = gan.sess.run([gan.generated_sequence, next_element['unlabeled_text']],)
+        test_out = gan.sess.run([gan.generated_sequence, gan.unlabeled_text],)
         sequence = test_out[0]
         origin = test_out[1]
         # shape = (batch, num_samples, summary_length, vocab_size)
