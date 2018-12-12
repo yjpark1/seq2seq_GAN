@@ -171,17 +171,28 @@ for epoch in range(1, num_epoch+1):
     ckpt_path = gan.saver.save(gan.sess, "saved/", epoch)
 
     if epoch % 1 == 0:
-        sequence = gan.sess.run([gan.generated_sequence],)[0]
+        test_out = gan.sess.run([gan.generated_sequence, next_element['unlabeled_text']],)
+        sequence = test_out[0]
+        origin = test_out[1]
         # shape = (batch, num_samples, summary_length, vocab_size)
         sequence = np.argmax(sequence, axis=2)
         # shape = (batch, summary_lenth)
         sequence = tokenizer.sequences_to_texts(sequence)
         print(sequence)
 
+        origin = np.argmax(origin, axis=2)
+        origin = tokenizer.sequences_to_texts(origin)
+
         f = open("fake_summary_{}.txt".format(epoch), 'w')
         for fake_summary in sequence:
             fake_summary = fake_summary + '\n'
             f.write(fake_summary)
+
+        f.write('<origin>\n\n\n')
+        for txt in origin:
+            txt = txt + '\n'
+            f.write(txt)
+
         f.close()
 
 

@@ -65,6 +65,8 @@ if __name__ == "__main__":
 
     tokenizer = text.Tokenizer(num_words=24353, filters='', oov_token='<UNK>')
     tokenizer.fit_on_texts(docs)
+    tokenizer.index_word[0] = '<PAD>'
+
     TextWithSummary_summary = tokenizer.texts_to_sequences(TextWithSummary_summary)
     TextWithSummary_text = tokenizer.texts_to_sequences(TextWithSummary_text)
     TextWithoutSummary_text = tokenizer.texts_to_sequences(TextWithoutSummary_text)
