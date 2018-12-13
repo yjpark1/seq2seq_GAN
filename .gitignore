@@ -1,6 +1,5 @@
 # dataset
-!datasets/TextWithoutSummary.csv
-!datasets/TextWithSummary.csv
+datasets/
 
 # man folder
 models/man/

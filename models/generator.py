@@ -14,13 +14,14 @@ from train import hyperparameter as H
 
 
 class Seq2SeqGenerator:
-    def __init__(self, emb_scope, namescope, vocab_size,
+    def __init__(self, emb_scope, namescope, temp, vocab_size,
                  embedding_units, enc_units, dec_units, tokenizer):
         self.emb_scope = emb_scope
         self.vocab_size = vocab_size
         self.embedding_units = embedding_units
         self.enc_units = enc_units
         self.dec_units = dec_units
+        self.temp = temp
 
         self.max_output_length = H.max_summary_len if namescope is 'generator' else H.max_text_len
         self._tokenID_start = tokenizer.word_index['<start>']
@@ -40,7 +41,7 @@ class Seq2SeqGenerator:
             (logit, sample_id), _, _ = self.build_decoder(encoder_outputs, encoder_states,
                                                           input_lengths=input_lengths)
             # gumbel trick
-            dist = tfp.distributions.RelaxedOneHotCategorical(temperature=1e-1, logits=logit)
+            dist = tfp.distributions.RelaxedOneHotCategorical(temperature=self.temp, logits=logit)
             generate_sequence = dist.sample()
             
             if self.namescope is 'generator':
@@ -90,7 +91,8 @@ class Seq2SeqGenerator:
             embeddings = lambda x: self.embeddings(x, self.emb_scope, reuse=True)
             pred_helper = CustomGreedyEmbeddingHelper(embedding=embeddings,
                                                       start_tokens=self.start_tokens,
-                                                      end_token=self._tokenID_end)
+                                                      end_token=self._tokenID_end,
+                                                      temp=self.temp)
 
             # <projection layer>
             # projection_layer = tf.layers.Dense(self.vocab_size, activation='softmax')

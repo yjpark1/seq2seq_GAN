@@ -35,8 +35,6 @@ text_len = H.max_text_len
 summary_len = H.max_summary_len
 
 num_epoch = 100
-num_steps = 500
-
 
 ###############################################################################
 ## define functions
@@ -72,7 +70,7 @@ docs = TextWithSummary_summary + TextWithSummary_text + TextWithoutSummary_text 
 docs = [x.split(' ') for x in docs]
 
 tokenizer = text.Tokenizer(num_words=H.vocab_size,
-                           filters='\t\n▲◆®©!"#$%&()*+,-./:;<=>?@[\]^_`{|}~',
+                           filters='◎△▶°•㎡\t\n▲◆®©!"#$%&()*+,-./:;<=>?@[\]^_`{|}~',
                            oov_token='<UNK>')
 tokenizer.fit_on_texts(docs)
 tokenizer.index_word[0] = '<PAD>'
@@ -86,13 +84,13 @@ TextWithoutSummary_text = tokenizer.texts_to_sequences(TextWithoutSummary_text)
 tf.reset_default_graph()
 sess = tf.Session()
 scope = tf.get_variable_scope()
-
+gumbel_temp = tf.placeholder(tf.float32)
 discriminator = RNNDiscriminator(emb_scope=scope, num_classes=2, vocab_size=H.vocab_size,
                                  embedding_units=H.embedding_units, hidden_units=64)
-generator = Seq2SeqGenerator(emb_scope=scope, namescope='generator', vocab_size=H.vocab_size,
+generator = Seq2SeqGenerator(emb_scope=scope, namescope='generator', temp=gumbel_temp, vocab_size=H.vocab_size,
                              embedding_units=H.embedding_units, enc_units=H.rnn_units, dec_units=H.rnn_units,
                              tokenizer=tokenizer)
-reconstructor = Seq2SeqGenerator(emb_scope=scope, namescope='reconstructor', vocab_size=H.vocab_size,
+reconstructor = Seq2SeqGenerator(emb_scope=scope, namescope='reconstructor', temp=gumbel_temp, vocab_size=H.vocab_size,
                                  embedding_units=H.embedding_units, enc_units=H.rnn_units, dec_units=H.rnn_units,
                                  tokenizer=tokenizer)
 gan = SeqGAN(sess, discriminator, generator, reconstructor, emb_scope=scope)
@@ -143,6 +141,8 @@ print('start training GAN model')
 gan.sess.run(iterator.initializer)
 
 losses = {"d": [], "g": [], "r": []}
+num_steps = int(np.ceil(len(TextWithSummary_summary) / H.batch_size))
+print(num_steps)
 
 for epoch in range(1, num_epoch + 1):
     start = time.time()
@@ -153,11 +153,13 @@ for epoch in range(1, num_epoch + 1):
     for step in range(1, num_steps + 1):
         _, batch_g_loss, batch_d_loss, batch_r_loss, bch_indvL_D, bch_indvL_G, bch_indvL_R = gan.sess.run(
             [gan.train_op, gan.gen_loss, gan.dis_loss, gan.rec_loss] +\
-            [indvL_D, indvL_G, indvL_R]
+            [indvL_D, indvL_G, indvL_R],
+            feed_dict={gumbel_temp: max(10 * 0.95 ** epoch, 1e-3)}
         )
+
         print('★step: {}, D: {:.3f}, G: {:.3f}, R: {:.3f}'.format(step, batch_d_loss, batch_g_loss, batch_r_loss))
-        print('D(real): {:.3f}, D(fake): {:.3f}'.format(bch_indvL_D[0], bch_indvL_D[1]), end=', ')
-        print('G(real): {:.3f}'.format(bch_indvL_R[0]), end=', ')
+        print('D(real): {:.3f}, D(fake): {:.3f}'.format(bch_indvL_D[0], bch_indvL_D[1]), end=' | ')
+        print('G(real): {:.3f}, D(fake): {:.3f}'.format(bch_indvL_G[0], bch_indvL_G[1]), end=' | ')
         print('R(real_model): {:.3f}, R(fake): {:.3f}, R(real): {:.3f}'.format(bch_indvL_R[0],
                                                                                bch_indvL_R[1],
                                                                                bch_indvL_R[2]))
@@ -167,12 +169,13 @@ for epoch in range(1, num_epoch + 1):
         train_L_R += batch_r_loss
 
         if step % 10 == 0:
-            test_out = gan.sess.run([gan.generated_sequence, gan.unlabeled_text], )
+            test_out = gan.sess.run([gan.generated_sequence, gan.unlabeled_text],
+                                    feed_dict={gumbel_temp: 1e-3})
             sequence = test_out[0]
             sequence = np.argmax(sequence, axis=2)
             sequence = tokenizer.sequences_to_texts(sequence)
             for s in sequence:
-                print(s)
+                print(s, end='\n\n')
     
     train_L_D /= num_steps
     train_L_G /= num_steps
@@ -192,20 +195,21 @@ for epoch in range(1, num_epoch + 1):
     ckpt_path = gan.saver.save(gan.sess, "saved/", epoch)
 
     if epoch % 1 == 0:
-        test_out = gan.sess.run([gan.generated_sequence, gan.unlabeled_text],)
+        test_out = gan.sess.run([gan.generated_sequence, gan.unlabeled_text],
+                                feed_dict={gumbel_temp: 1e-3})
         sequence = test_out[0]
         origin = test_out[1]
         # shape = (batch, num_samples, summary_length, vocab_size)
         sequence = np.argmax(sequence, axis=2)
         # shape = (batch, summary_lenth)
         sequence = tokenizer.sequences_to_texts(sequence)
-        print(sequence)
+        for s in sequence:
+            print(s, end='\n\n')
 
         origin = np.argmax(origin, axis=2)
         origin = tokenizer.sequences_to_texts(origin)
 
-        f = codecs.open("summary_history/fake_summary_{}.txt".format(epoch), 'w',
-                        encoding='cp949')
+        f = open("summary_history/fake_summary_{}.txt".format(epoch), 'w')
         for fake_summary in sequence:
             fake_summary = fake_summary + '\n'
             f.write(fake_summary)

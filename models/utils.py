@@ -28,7 +28,7 @@ class CustomGreedyEmbeddingHelper(Helper):
     result through an embedding layer to get the next input.
     """
 
-    def __init__(self, embedding, start_tokens, end_token):
+    def __init__(self, embedding, start_tokens, end_token, temp):
         """Initializer.
         Args:
             embedding: A callable that takes a vector tensor of `ids` (argmax ids),
@@ -51,6 +51,7 @@ class CustomGreedyEmbeddingHelper(Helper):
         self._end_token = end_token
         self._batch_size = tf.shape(self._start_tokens)[0]
         self._start_inputs = self._embedding_fn(self._start_tokens)
+        self.temp = temp
 
     @property
     def batch_size(self):
@@ -83,7 +84,7 @@ class CustomGreedyEmbeddingHelper(Helper):
         del time  # unused by next_inputs_fn
         # gumbel trick
         # http://anotherdatum.com/gumbel-gan.html
-        dist = tfp.distributions.RelaxedOneHotCategorical(temperature=1e-1, logits=outputs)
+        dist = tfp.distributions.RelaxedOneHotCategorical(temperature=self.temp, logits=outputs)
         outputs = dist.sample()
 
         finished = math_ops.equal(sample_ids, self._end_token)

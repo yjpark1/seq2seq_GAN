@@ -158,3 +158,6 @@ TextWithoutSummary = TextWithoutSummary[idx]
 
 TextWithSummary.to_csv('datasets/TextWithSummary.csv', encoding='utf8')
 TextWithoutSummary.to_csv('datasets/TextWithoutSummary.csv', encoding='utf8')
+
+TextWithSummary.to_pickle('datasets/TextWithSummary.pkl')
+TextWithoutSummary.to_pickle('datasets/TextWithoutSummary.pkl')

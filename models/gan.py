@@ -71,8 +71,10 @@ class SeqGAN:
         g_weights = get_scope_variables('generator') + get_scope_variables('embedding')
 
         # loss: discriminator
-        d_r_loss = -tf.reduce_mean(tf.log(tf.clip_by_value(d_real_preds, 1e-7, 1. - 1e-7)))  # r_preds -> 1.
+        d_r_loss = -tf.reduce_mean(0.9 * tf.log(tf.clip_by_value(d_real_preds, 1e-7, 1. - 1e-7)))  # r_preds -> 1.
         d_f_loss = -tf.reduce_mean(tf.log(1 - tf.clip_by_value(d_fake_preds, 1e-7, 1. - 1e-7)))  # g_preds -> 0.
+        # d_r_loss = tf.nn.sigmoid_cross_entropy_with_logits(d_real_logits, labels=.9)
+        # d_f_loss = tf.nn.sigmoid_cross_entropy_with_logits(d_fake_logits, labels=0.)
         dis_loss = d_r_loss + d_f_loss
 
         # loss: reconstructor
@@ -93,13 +95,21 @@ class SeqGAN:
         r_f_loss = tf.contrib.seq2seq.sequence_loss(r_fake_logits, unlabeled_text_target, weight_u_txt)
         r_t_loss = tf.contrib.seq2seq.sequence_loss(r_target_logits, labeled_text_target, weight_l_txt)
 
+        r_r_loss = tf.clip_by_value(r_r_loss, 0, 20)
+        r_f_loss = tf.clip_by_value(r_f_loss, 0, 20)
+        r_t_loss = tf.clip_by_value(r_t_loss, 0, 20)
+
         rec_loss = r_r_loss + r_f_loss + r_t_loss
 
         # loss: generator
+        # from target summary
         g_real_logits = dynamic_time_pad(g_real_logits, H.max_summary_len, batch_size)
         summary_target = tf.math.argmax(self.real_summary, axis=-1)
         g_r_loss = tf.contrib.seq2seq.sequence_loss(g_real_logits + 1e-7, summary_target, weight_s_txt)
-        gen_loss = 10 * g_r_loss + 5 * r_f_loss - d_f_loss
+        g_r_loss = tf.clip_by_value(g_r_loss, 0, 20)
+        # from discriminator
+        g_d_loss = -tf.reduce_mean(tf.log(tf.clip_by_value(d_fake_preds, 1e-7, 1. - 1e-7)))  # g_preds -> 0.
+        gen_loss = 10 * g_r_loss + 5 * r_f_loss + g_d_loss
         
         self.dis_loss = dis_loss
         self.gen_loss = gen_loss
@@ -121,7 +131,7 @@ class SeqGAN:
         self.saver = tf.train.Saver()
         self.sess.run(tf.global_variables_initializer())
         print('build GAN model done!')
-        return (d_r_loss, d_f_loss), (g_r_loss), (r_r_loss, r_f_loss, r_t_loss)
+        return (d_r_loss, d_f_loss), (g_r_loss, g_d_loss), (r_r_loss, r_f_loss, r_t_loss)
 
     def train_operator(self, loss_scope, loss, weights):
         with tf.variable_scope(loss_scope):
