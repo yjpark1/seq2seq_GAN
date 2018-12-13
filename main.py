@@ -211,12 +211,12 @@ for epoch in range(1, num_epoch + 1):
 
         f = open("summary_history/fake_summary_{}.txt".format(epoch), 'w')
         for fake_summary in sequence:
-            fake_summary = fake_summary + '\n'
+            fake_summary = fake_summary + '\n\n'
             f.write(fake_summary)
 
         f.write('<origin>\n\n\n')
         for txt in origin:
-            txt = txt + '\n'
+            txt = txt + '\n\n'
             f.write(txt)
 
         f.close()
