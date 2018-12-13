@@ -5,6 +5,7 @@ Created on Wed Dec  5 17:18:02 2018
 @author: HQ
 """
 import os
+
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
@@ -15,13 +16,13 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from keras.preprocessing import text
 import pandas as pd
+import codecs
 
 ## local import
 from models.discriminator import RNNDiscriminator
 from models.generator import Seq2SeqGenerator
 from models.gan import SeqGAN
 from train.utils import Generator, Token_startend
-
 
 ## hyperparameters
 from train import hyperparameter as H
@@ -35,6 +36,8 @@ summary_len = H.max_summary_len
 
 num_epoch = 100
 num_steps = 500
+
+
 ###############################################################################
 ## define functions
 def plot_loss(losses):
@@ -68,7 +71,9 @@ TextWithoutSummary_text = [Token_startend(x) for x in TextWithoutSummary_text]
 docs = TextWithSummary_summary + TextWithSummary_text + TextWithoutSummary_text + ['<start>']
 docs = [x.split(' ') for x in docs]
 
-tokenizer = text.Tokenizer(num_words=H.vocab_size, filters='', oov_token='<UNK>')
+tokenizer = text.Tokenizer(num_words=H.vocab_size,
+                           filters='\t\n▲◆®©!"#$%&()*+,-./:;<=>?@[\]^_`{|}~',
+                           oov_token='<UNK>')
 tokenizer.fit_on_texts(docs)
 tokenizer.index_word[0] = '<PAD>'
 
@@ -91,7 +96,6 @@ reconstructor = Seq2SeqGenerator(emb_scope=scope, namescope='reconstructor', voc
                                  embedding_units=H.embedding_units, enc_units=H.rnn_units, dec_units=H.rnn_units,
                                  tokenizer=tokenizer)
 gan = SeqGAN(sess, discriminator, generator, reconstructor, emb_scope=scope)
-
 
 ######################################################################
 # train
@@ -133,28 +137,42 @@ dcomb = tf.data.Dataset.zip({'real_summary': lbl_summary.repeat(),
 iterator = dcomb.make_initializable_iterator()
 # extract an element
 next_element = iterator.get_next()
-gan.build_gan(inputs=next_element)
+indvL_D, indvL_G, indvL_R = gan.build_gan(inputs=next_element)
 
 print('start training GAN model')
 gan.sess.run(iterator.initializer)
 
 losses = {"d": [], "g": [], "r": []}
 
-for epoch in range(1, num_epoch+1):
-    start = time.time()   
+for epoch in range(1, num_epoch + 1):
+    start = time.time()
     train_L_D = 0.
     train_L_G = 0.
     train_L_R = 0.
 
-    for step in tqdm(range(1, num_steps+1)):
-        _, batch_g_loss, batch_d_loss, batch_r_loss = gan.sess.run(
-                [gan.train_op, gan.gen_loss, gan.dis_loss, gan.rec_loss]
-                )
-        # print('D: {:.3f}, G: {:.3f}, R: {:.3f}'.format(batch_d_loss, batch_g_loss, batch_r_loss))
+    for step in range(1, num_steps + 1):
+        _, batch_g_loss, batch_d_loss, batch_r_loss, bch_indvL_D, bch_indvL_G, bch_indvL_R = gan.sess.run(
+            [gan.train_op, gan.gen_loss, gan.dis_loss, gan.rec_loss] +\
+            [indvL_D, indvL_G, indvL_R]
+        )
+        print('★step: {}, D: {:.3f}, G: {:.3f}, R: {:.3f}'.format(step, batch_d_loss, batch_g_loss, batch_r_loss))
+        print('D(real): {:.3f}, D(fake): {:.3f}'.format(bch_indvL_D[0], bch_indvL_D[1]), end=', ')
+        print('G(real): {:.3f}'.format(bch_indvL_R[0]), end=', ')
+        print('R(real_model): {:.3f}, R(fake): {:.3f}, R(real): {:.3f}'.format(bch_indvL_R[0],
+                                                                               bch_indvL_R[1],
+                                                                               bch_indvL_R[2]))
 
         train_L_D += batch_d_loss
         train_L_G += batch_g_loss
         train_L_R += batch_r_loss
+
+        if step % 10 == 0:
+            test_out = gan.sess.run([gan.generated_sequence, gan.unlabeled_text], )
+            sequence = test_out[0]
+            sequence = np.argmax(sequence, axis=2)
+            sequence = tokenizer.sequences_to_texts(sequence)
+            for s in sequence:
+                print(s)
     
     train_L_D /= num_steps
     train_L_G /= num_steps
@@ -186,7 +204,8 @@ for epoch in range(1, num_epoch+1):
         origin = np.argmax(origin, axis=2)
         origin = tokenizer.sequences_to_texts(origin)
 
-        f = open("fake_summary_{}.txt".format(epoch), 'w')
+        f = codecs.open("summary_history/fake_summary_{}.txt".format(epoch), 'w',
+                        encoding='cp949')
         for fake_summary in sequence:
             fake_summary = fake_summary + '\n'
             f.write(fake_summary)

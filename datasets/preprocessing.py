@@ -73,10 +73,10 @@ def preprocess_text(text):
         text = np.array([re.sub(rmv_chr, '"', x) for x in text])
 
     # remove some characters
-    text = np.array([re.sub('·', ', ', x) for x in text])
-    text = np.array([re.sub('→', ', ', x) for x in text])
+    text = np.array([re.sub('todatestring|autosummaryfeedbackdata|afterhtml|removeclass|tomaininfolayermanager|jquery|confirmapplyfeedback|cookie|x2', ' ', x) for x in text])
+    text = np.array([re.sub('\t+', ' ', x) for x in text])
     text = np.array([re.sub('\n+', ' ', x) for x in text])
-    text = np.array([re.sub('[!#Δ\`©]', ', ', x) for x in text])
+    text = np.array([re.sub('[↓→!#Δ\`©·㎖]', ' ', x) for x in text])
 
     # remove multiple space
     text = np.array([re.sub('\s+', ' ', x) for x in text])

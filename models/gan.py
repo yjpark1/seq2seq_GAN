@@ -43,6 +43,7 @@ class SeqGAN:
         # placeholder: summary
         self.real_summary = inputs['real_summary']
         self.real_summary_length = inputs['real_summary_len']
+        weight_s_txt = tf.sequence_mask(self.real_summary_length, H.max_summary_len, dtype=tf.float32)
 
         # build generator
         g_real_logits, g_real_seq = self.G.build_model(self.labeled_text, self.labeled_text_lengths,
@@ -83,6 +84,11 @@ class SeqGAN:
         r_fake_logits = dynamic_time_pad(r_fake_logits, H.max_text_len, batch_size)
         r_target_logits = dynamic_time_pad(r_target_logits, H.max_text_len, batch_size)
 
+        # clippling to prevent NaN
+        r_real_logits = r_real_logits + 1e-7
+        r_fake_logits = r_fake_logits + 1e-7
+        r_target_logits = r_target_logits + 1e-7
+
         r_r_loss = tf.contrib.seq2seq.sequence_loss(r_real_logits, labeled_text_target, weight_l_txt)
         r_f_loss = tf.contrib.seq2seq.sequence_loss(r_fake_logits, unlabeled_text_target, weight_u_txt)
         r_t_loss = tf.contrib.seq2seq.sequence_loss(r_target_logits, labeled_text_target, weight_l_txt)
@@ -90,7 +96,10 @@ class SeqGAN:
         rec_loss = r_r_loss + r_f_loss + r_t_loss
 
         # loss: generator
-        gen_loss = r_f_loss - d_f_loss
+        g_real_logits = dynamic_time_pad(g_real_logits, H.max_summary_len, batch_size)
+        summary_target = tf.math.argmax(self.real_summary, axis=-1)
+        g_r_loss = tf.contrib.seq2seq.sequence_loss(g_real_logits + 1e-7, summary_target, weight_s_txt)
+        gen_loss = 10 * g_r_loss + 5 * r_f_loss - d_f_loss
         
         self.dis_loss = dis_loss
         self.gen_loss = gen_loss
@@ -112,6 +121,7 @@ class SeqGAN:
         self.saver = tf.train.Saver()
         self.sess.run(tf.global_variables_initializer())
         print('build GAN model done!')
+        return (d_r_loss, d_f_loss), (g_r_loss), (r_r_loss, r_f_loss, r_t_loss)
 
     def train_operator(self, loss_scope, loss, weights):
         with tf.variable_scope(loss_scope):
