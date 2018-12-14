@@ -12,7 +12,7 @@ def get_scope_variables(scope):
 
 
 class SeqGAN:
-    def __init__(self, sess, discriminator, generator, reconstructor, emb_scope,
+    def __init__(self, sess, discriminator, generator, reconstructor,
                  learning_rate=0.001):
         self.sess = sess
         self.D = discriminator
@@ -28,7 +28,7 @@ class SeqGAN:
         self.max_output_length = H.max_summary_len
 
         # manage scope
-        self.emb_scope = emb_scope
+        # self.emb_scope = emb_scope
 
     def build_iterator(self, txtwithsumm_summ,
                        txtwithsumm_txt, txtwithoutsumm_txt):
@@ -103,6 +103,7 @@ class SeqGAN:
         real_summary_di, real_summary_do = self.make_decoder_teacher(self.real_summary)
         labeled_text_di, labeled_text_do = self.make_decoder_teacher(self.labeled_text)
         unlabeled_text_di, unlabeled_text_do = self.make_decoder_teacher(self.unlabeled_text)
+        real_summary_in = tf.one_hot(self.real_summary, self.vocab_size)
 
         # build generator
         g_real_logits, g_real_seq, g_real_seq = self.G.build_model(self.labeled_text,
@@ -112,12 +113,12 @@ class SeqGAN:
                                                                    reuse=False)
         g_fake_logits, g_fake_seq, g_fake_seq = self.G.build_model(self.unlabeled_text,
                                                                    self.unlabeled_text_lengths,
-                                                                   reuse=True, emb_reuse=True)
+                                                                   reuse=True)
         
         self.generated_sequence = g_fake_seq
         
         # build discriminator
-        d_real_logits, d_real_preds = self.D.build_model(self.real_summary, reuse=False)
+        d_real_logits, d_real_preds = self.D.build_model(real_summary_in, reuse=False)
         d_fake_logits, d_fake_preds = self.D.build_model(g_fake_seq, reuse=True)
 
         # build reconstructor
@@ -125,7 +126,7 @@ class SeqGAN:
                                                        target_inputs=labeled_text_di,
                                                        len_target_inputs=self.labeled_text_lengths,
                                                        reuse=False)
-        real_summary_in = tf.one_hot(self.real_summary, self.vocab_size)
+
         r_target_logits, r_target_seq = self.R.build_model(real_summary_in, self.real_summary_length,
                                                            target_inputs=labeled_text_di,
                                                            len_target_inputs=self.labeled_text_lengths,
