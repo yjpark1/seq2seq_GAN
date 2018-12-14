@@ -15,22 +15,32 @@ import os
 
 class Generator:
     def __init__(self, x, max_len=800):
+        """
+        mode: 'seq' | 'onehot'
+        type: 'encoder_input' | 'decoder_input' | 'decoder_output'
+        """
         self.x = x
         self.max_len = max_len
 
     def gen_data(self):
         for b in self.x:
-            b = sequence.pad_sequences([b], maxlen=self.max_len, truncating='post', padding='post')
-            b = keras.utils.to_categorical(b, num_classes=H.vocab_size)
+            # preprocessing: pad sequence
+            b = b[:self.max_len]
+            b = sequence.pad_sequences([b], maxlen=self.max_len + 1,
+                                       truncating='post', padding='post')
+            # if self.mode == 'onehot':
+            #     b = keras.utils.to_categorical(b, num_classes=H.vocab_size)
+
             yield b[0]
 
     def gen_len(self):
         for b in self.x:
+            b = b[:self.max_len]
             yield len(b)
 
 
 def Token_startend(x):
-    return x + ' <END>'
+    return '<start> ' + x
 
 
 if __name__ == "__main__":
@@ -43,6 +53,10 @@ if __name__ == "__main__":
     TextWithSummary_text = TextWithSummary.text.values.tolist()
     TextWithoutSummary_text = TextWithoutSummary.text.values.tolist()
 
+    # filter short article out
+    TextWithoutSummary_text = [x for x in TextWithoutSummary_text if len(x) > H.max_summary_len]
+
+    # add <end> token
     TextWithSummary_summary = [Token_startend(x) for x in TextWithSummary_summary]
     TextWithSummary_text = [Token_startend(x) for x in TextWithSummary_text]
     TextWithoutSummary_text = [Token_startend(x) for x in TextWithoutSummary_text]
@@ -61,9 +75,10 @@ if __name__ == "__main__":
     plt.hist(sorted_value, range=(0, 100), log=True)
     plt.show()
     print('number of tokens more than 10: ', sum(sorted_value > 10))
-    # 24353
-
-    tokenizer = text.Tokenizer(num_words=24353, filters='', oov_token='<UNK>')
+    # 24098
+    tokenizer = text.Tokenizer(num_words=24353,
+                               filters='\t\n!"#$%&()*+,-/:;=?@[\]^_`{|}~',
+                               oov_token='<UNK>')
     tokenizer.fit_on_texts(docs)
     tokenizer.index_word[0] = '<PAD>'
 

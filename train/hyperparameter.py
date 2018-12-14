@@ -1,6 +1,6 @@
 import numpy as np
 
-vocab_size = 24353
+vocab_size = 24098
 embedding_units = 64
 rnn_units = 128
 batch_size = 8

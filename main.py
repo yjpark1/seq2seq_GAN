@@ -16,28 +16,23 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from keras.preprocessing import text
 import pandas as pd
-import codecs
 
 ## local import
 from models.discriminator import RNNDiscriminator
 from models.generator import Seq2SeqGenerator
+from models.reconstructor import Seq2SeqReconstructor
 from models.gan import SeqGAN
-from train.utils import Generator, Token_startend
+from train.utils import Token_startend
 
 ## hyperparameters
 from train import hyperparameter as H
 
 ###############################################################################
-## setting hyperparameter
-batch_size = H.batch_size
-vocab_size = H.vocab_size
-text_len = H.max_text_len
-summary_len = H.max_summary_len
-
+# setting hyperparameter
 num_epoch = 100
 
 ###############################################################################
-## define functions
+# define functions
 def plot_loss(losses):
     plt.figure(figsize=(5, 4))
     plt.plot(losses["d"], label='discriminitive loss')
@@ -69,11 +64,11 @@ TextWithoutSummary_text = [Token_startend(x) for x in TextWithoutSummary_text]
 docs = TextWithSummary_summary + TextWithSummary_text + TextWithoutSummary_text + ['<start>']
 docs = [x.split(' ') for x in docs]
 
-tokenizer = text.Tokenizer(num_words=H.vocab_size,
-                           filters='◎△▶°•㎡\t\n▲◆®©!"#$%&()*+,-./:;<=>?@[\]^_`{|}~',
+tokenizer = text.Tokenizer(num_words=H.vocab_size - 1,
+                           filters='!"#$%&()*+,-./:;=?@[\]^_`{|}~',
                            oov_token='<UNK>')
 tokenizer.fit_on_texts(docs)
-tokenizer.index_word[0] = '<PAD>'
+tokenizer.index_word[0] = '<end>'
 
 TextWithSummary_summary = tokenizer.texts_to_sequences(TextWithSummary_summary)
 TextWithSummary_text = tokenizer.texts_to_sequences(TextWithSummary_text)
@@ -85,65 +80,55 @@ tf.reset_default_graph()
 sess = tf.Session()
 scope = tf.get_variable_scope()
 gumbel_temp = tf.placeholder(tf.float32)
-discriminator = RNNDiscriminator(emb_scope=scope, num_classes=2, vocab_size=H.vocab_size,
+# embedding = tf.layers.Dense(H.embedding_units, name='embedding', use_bias=False)
+embedding = tf.get_variable("embedding", shape=[H.vocab_size, H.embedding_units],
+                            dtype=tf.float32)
+discriminator = RNNDiscriminator(emb=embedding, num_classes=2, vocab_size=H.vocab_size,
                                  embedding_units=H.embedding_units, hidden_units=64)
-generator = Seq2SeqGenerator(emb_scope=scope, namescope='generator', temp=gumbel_temp, vocab_size=H.vocab_size,
+generator = Seq2SeqGenerator(emb=embedding, temp=gumbel_temp, vocab_size=H.vocab_size,
                              embedding_units=H.embedding_units, enc_units=H.rnn_units, dec_units=H.rnn_units,
                              tokenizer=tokenizer)
-reconstructor = Seq2SeqGenerator(emb_scope=scope, namescope='reconstructor', temp=gumbel_temp, vocab_size=H.vocab_size,
-                                 embedding_units=H.embedding_units, enc_units=H.rnn_units, dec_units=H.rnn_units,
-                                 tokenizer=tokenizer)
-gan = SeqGAN(sess, discriminator, generator, reconstructor, emb_scope=scope)
+reconstructor = Seq2SeqReconstructor(emb=embedding, temp=gumbel_temp, vocab_size=H.vocab_size,
+                                     embedding_units=H.embedding_units, enc_units=H.rnn_units, dec_units=H.rnn_units)
+gan = SeqGAN(sess, discriminator, generator, reconstructor)
 
 ######################################################################
 # train
-gen_lbl_summary = Generator(TextWithSummary_summary, max_len=H.max_summary_len)
-gen_lbl_text = Generator(TextWithSummary_text, max_len=H.max_text_len)
-gen_ulbl_text = Generator(TextWithoutSummary_text, max_len=H.max_text_len)
-
-lbl_summary = tf.data.Dataset().from_generator(gen_lbl_summary.gen_data,
-                                               output_types=tf.float32,
-                                               output_shapes=(tf.TensorShape([H.max_summary_len, H.vocab_size])))
-
-lbl_text = tf.data.Dataset().from_generator(gen_lbl_text.gen_data,
-                                            output_types=tf.float32,
-                                            output_shapes=(tf.TensorShape([H.max_text_len, H.vocab_size])))
-
-ulbl_text = tf.data.Dataset().from_generator(gen_ulbl_text.gen_data,
-                                             output_types=tf.float32,
-                                             output_shapes=(tf.TensorShape([H.max_text_len, H.vocab_size])))
-
-len_lbl_summary = tf.data.Dataset().from_generator(gen_lbl_summary.gen_len,
-                                                   output_types=tf.int32,
-                                                   output_shapes=(tf.TensorShape([])))
-
-len_lbl_text = tf.data.Dataset().from_generator(gen_lbl_text.gen_len,
-                                                output_types=tf.int32,
-                                                output_shapes=(tf.TensorShape([])))
-
-len_ulbl_text = tf.data.Dataset().from_generator(gen_ulbl_text.gen_len,
-                                                 output_types=tf.int32,
-                                                 output_shapes=(tf.TensorShape([])))
-
-dcomb = tf.data.Dataset.zip({'real_summary': lbl_summary.repeat(),
-                             'labeled_text': lbl_text.repeat(),
-                             'unlabeled_text': ulbl_text.repeat(),
-                             'real_summary_len': len_lbl_summary.repeat(),
-                             'labeled_text_len': len_lbl_text.repeat(),
-                             'unlabeled_text_len': len_ulbl_text.repeat()}).batch(H.batch_size)
-
-iterator = dcomb.make_initializable_iterator()
+iterator = gan.build_iterator(TextWithSummary_summary, TextWithSummary_text, TextWithoutSummary_text)
 # extract an element
 next_element = iterator.get_next()
+# build gan
 indvL_D, indvL_G, indvL_R = gan.build_gan(inputs=next_element)
+# initialization
+gan.sess.run(tf.global_variables_initializer())
 
 print('start training GAN model')
-gan.sess.run(iterator.initializer)
-
 losses = {"d": [], "g": [], "r": []}
 num_steps = int(np.ceil(len(TextWithSummary_summary) / H.batch_size))
 print(num_steps)
 
+# train generator
+gan.sess.run(iterator.initializer)
+for epoch in range(1, 250 + 1):
+    for step in range(1, num_steps + 1):
+        _, batch_loss = gan.sess.run(
+            [gan.pretrain_gen, gan.g_r_loss],
+            feed_dict={gumbel_temp: max(1 * 0.9 ** epoch, 1e-3)}
+        )
+        print('epoch: {}, step: {}, G: {:.3f}'.format(epoch, step, batch_loss))
+
+# train reconstructor
+gan.sess.run(iterator.initializer)
+for epoch in range(1, 250 + 1):
+    for step in range(1, num_steps + 1):
+        _, batch_loss = gan.sess.run(
+            [gan.pretrain_recon, gan.r_t_loss],
+            feed_dict={gumbel_temp: max(1 * 0.95 ** epoch, 1e-3)}
+        )
+        print('epoch: {}, step: {}, G: {:.3f}'.format(epoch, step, batch_loss))
+
+# train gan
+gan.sess.run(iterator.initializer)
 for epoch in range(1, num_epoch + 1):
     start = time.time()
     train_L_D = 0.
@@ -157,13 +142,13 @@ for epoch in range(1, num_epoch + 1):
             feed_dict={gumbel_temp: max(10 * 0.95 ** epoch, 1e-3)}
         )
 
-        print('★step: {}, D: {:.3f}, G: {:.3f}, R: {:.3f}'.format(step, batch_d_loss, batch_g_loss, batch_r_loss))
+        print('★epoch: {}, step: {}, D: {:.3f}, G: {:.3f}, R: {:.3f}'.format(epoch, step, batch_d_loss,
+                                                                             batch_g_loss, batch_r_loss))
         print('D(real): {:.3f}, D(fake): {:.3f}'.format(bch_indvL_D[0], bch_indvL_D[1]), end=' | ')
         print('G(real): {:.3f}, D(fake): {:.3f}'.format(bch_indvL_G[0], bch_indvL_G[1]), end=' | ')
         print('R(real_model): {:.3f}, R(fake): {:.3f}, R(real): {:.3f}'.format(bch_indvL_R[0],
                                                                                bch_indvL_R[1],
                                                                                bch_indvL_R[2]))
-
         train_L_D += batch_d_loss
         train_L_G += batch_g_loss
         train_L_R += batch_r_loss

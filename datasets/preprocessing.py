@@ -9,7 +9,7 @@ def read_files(paths, encoding='cp949'):
     # <read labeled text files>
     data = []
     for p in paths:
-        file = pd.read_csv(p, encoding=encoding, engine='python')
+        file = pd.read_csv(p, encoding=encoding, engine='python', dtype=object)
         data.append(file)
     data = pd.concat(data)
 
@@ -63,7 +63,7 @@ def MorphAnalDocument(text):
 
 def preprocess_text(text):
     # remove string in [] or ()
-    text = np.array([re.sub("[\(\[].*?[\)\]]", "", x) for x in text])
+    text = np.array([re.sub("[\【\(\《\[].*?[\】\)\》\]]", "", x) for x in text])
     # remove footnote
     text = np.array([remove_footnote(x) for x in text])
 
@@ -73,10 +73,11 @@ def preprocess_text(text):
         text = np.array([re.sub(rmv_chr, '"', x) for x in text])
 
     # remove some characters
-    text = np.array([re.sub('todatestring|autosummaryfeedbackdata|afterhtml|removeclass|tomaininfolayermanager|jquery|confirmapplyfeedback|cookie|x2', ' ', x) for x in text])
+    text = np.array([re.sub('todatestring|autosummaryfeedbackdata|afterhtml|removeclass|tomaininfolayermanager|jquery|confirmapplyfeedback|cookie|x2|x5', ' ', x) for x in text])
     text = np.array([re.sub('\t+', ' ', x) for x in text])
-    text = np.array([re.sub('\n+', ' ', x) for x in text])
-    text = np.array([re.sub('[↓→!#Δ\`©·㎖]', ' ', x) for x in text])
+    text = np.array([re.sub('\n+', '. ', x) for x in text])
+    text = np.array([re.sub('\.+', ' ', x) for x in text])
+    text = np.array([re.sub('[↓→!#Δ\`·㎖◎△▶°•㎡▲◆®©]', ' ', x) for x in text])
 
     # remove multiple space
     text = np.array([re.sub('\s+', ' ', x) for x in text])
@@ -93,6 +94,14 @@ paths_add = glob.glob('datasets/add_labeled data/*.csv')
 data_label = read_files(paths_label, encoding='cp949')
 data_unlabel = read_files(paths_unlabel, encoding='utf8')
 data_add = read_files(paths_add, encoding='utf8')
+
+# remove code
+rmv_list = []
+for i, x in enumerate(data_unlabel.body.values):
+    if 'return' in str(x):
+        rmv_list.append(i)
+
+data_unlabel = data_unlabel.drop(rmv_list, axis=0)
 
 # split summary & text
 # file 1
@@ -159,5 +168,5 @@ TextWithoutSummary = TextWithoutSummary[idx]
 TextWithSummary.to_csv('datasets/TextWithSummary.csv', encoding='utf8')
 TextWithoutSummary.to_csv('datasets/TextWithoutSummary.csv', encoding='utf8')
 
-TextWithSummary.to_pickle('datasets/TextWithSummary.pkl')
-TextWithoutSummary.to_pickle('datasets/TextWithoutSummary.pkl')
+# TextWithSummary.to_pickle('datasets/TextWithSummary.pkl')
+# TextWithoutSummary.to_pickle('datasets/TextWithoutSummary.pkl')
