@@ -106,12 +106,12 @@ class SeqGAN:
         real_summary_in = tf.one_hot(self.real_summary, self.vocab_size)
 
         # build generator
-        g_real_logits, g_real_seq, g_real_seq = self.G.build_model(self.labeled_text,
+        g_real_logits, g_real_seq, g_real_len = self.G.build_model(self.labeled_text,
                                                                    self.labeled_text_lengths,
                                                                    target_inputs=real_summary_di,
                                                                    len_target_inputs=self.real_summary_length,
                                                                    reuse=False)
-        g_fake_logits, g_fake_seq, g_fake_seq = self.G.build_model(self.unlabeled_text,
+        g_fake_logits, g_fake_seq, g_fake_len = self.G.build_model(self.unlabeled_text,
                                                                    self.unlabeled_text_lengths,
                                                                    reuse=True)
         
@@ -122,16 +122,15 @@ class SeqGAN:
         d_fake_logits, d_fake_preds = self.D.build_model(g_fake_seq, reuse=True)
 
         # build reconstructor
-        r_real_logits, r_real_seq = self.R.build_model(g_real_seq, g_real_seq,
+        r_real_logits, r_real_seq = self.R.build_model(g_real_seq, g_real_len,
                                                        target_inputs=labeled_text_di,
                                                        len_target_inputs=self.labeled_text_lengths,
                                                        reuse=False)
-
         r_target_logits, r_target_seq = self.R.build_model(real_summary_in, self.real_summary_length,
                                                            target_inputs=labeled_text_di,
                                                            len_target_inputs=self.labeled_text_lengths,
                                                            reuse=True)
-        r_fake_logits, r_fake_seq = self.R.build_model(g_fake_seq, g_fake_seq,
+        r_fake_logits, r_fake_seq = self.R.build_model(g_fake_seq, g_fake_len,
                                                        target_inputs=unlabeled_text_di,
                                                        len_target_inputs=self.unlabeled_text_lengths,
                                                        reuse=True)
@@ -147,8 +146,8 @@ class SeqGAN:
         dis_loss = d_r_loss + d_f_loss
 
         # loss: reconstructor
-        labeled_text_target = tf.math.argmax(self.labeled_text, axis=-1)
-        unlabeled_text_target = tf.math.argmax(self.unlabeled_text, axis=-1)
+        # labeled_text_target = tf.math.argmax(self.labeled_text, axis=-1)
+        # unlabeled_text_target = tf.math.argmax(self.unlabeled_text, axis=-1)
 
         # pad output
         r_real_logits = dynamic_time_pad(r_real_logits, H.max_text_len, batch_size)
@@ -160,9 +159,9 @@ class SeqGAN:
         r_fake_logits = r_fake_logits + 1e-7
         r_target_logits = r_target_logits + 1e-7
 
-        r_r_loss = tf.contrib.seq2seq.sequence_loss(r_real_logits, labeled_text_target, weight_l_txt)
-        r_f_loss = tf.contrib.seq2seq.sequence_loss(r_fake_logits, unlabeled_text_target, weight_u_txt)
-        r_t_loss = tf.contrib.seq2seq.sequence_loss(r_target_logits, labeled_text_target, weight_l_txt)
+        r_r_loss = tf.contrib.seq2seq.sequence_loss(r_real_logits, labeled_text_do, weight_l_txt)
+        r_f_loss = tf.contrib.seq2seq.sequence_loss(r_fake_logits, unlabeled_text_do, weight_u_txt)
+        r_t_loss = tf.contrib.seq2seq.sequence_loss(r_target_logits, labeled_text_do, weight_l_txt)
 
         r_r_loss = tf.clip_by_value(r_r_loss, 0, 20)
         r_f_loss = tf.clip_by_value(r_f_loss, 0, 20)
@@ -173,8 +172,7 @@ class SeqGAN:
         # loss: generator
         # from target summary
         g_real_logits = dynamic_time_pad(g_real_logits, H.max_summary_len, batch_size)
-        summary_target = tf.math.argmax(self.real_summary, axis=-1)
-        g_r_loss = tf.contrib.seq2seq.sequence_loss(g_real_logits + 1e-7, summary_target, weight_s_txt)
+        g_r_loss = tf.contrib.seq2seq.sequence_loss(g_real_logits, real_summary_do, weight_s_txt)
         self.g_r_loss = tf.clip_by_value(g_r_loss, 0, 20)
         # from discriminator
         g_d_loss = -tf.reduce_mean(tf.log(tf.clip_by_value(d_fake_preds, 1e-7, 1. - 1e-7)))  # g_preds -> 0.

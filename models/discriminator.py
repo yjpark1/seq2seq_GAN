@@ -24,10 +24,9 @@ class RNNDiscriminator:
         with tf.variable_scope('', reuse=True):
             embedding_kernel = tf.get_variable('embedding')
         # embed_dense = lambda x: K.dot(x, embedding_kernel)
-        embed_dense = lambda x: tf.tensordot(x, embedding_kernel, axes = 1)
+        embed_dense = lambda x: tf.tensordot(x, embedding_kernel, axes=1)
         inputs_embed = embed_dense(inputs_seq)
         # inputs_embdded = self.embeddings(inputs_seq)
-
 
         with tf.variable_scope('discriminator', reuse=reuse):
             # rnn cell 

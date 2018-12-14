@@ -109,17 +109,17 @@ print(num_steps)
 
 # train generator
 gan.sess.run(iterator.initializer)
-for epoch in range(1, 250 + 1):
+for epoch in range(1, 50 + 1):
     for step in range(1, num_steps + 1):
         _, batch_loss = gan.sess.run(
             [gan.pretrain_gen, gan.g_r_loss],
-            feed_dict={gumbel_temp: max(1 * 0.9 ** epoch, 1e-3)}
+            feed_dict={gumbel_temp: max(1 * 0.8 ** epoch, 1e-3)}
         )
         print('epoch: {}, step: {}, G: {:.3f}'.format(epoch, step, batch_loss))
 
 # train reconstructor
 gan.sess.run(iterator.initializer)
-for epoch in range(1, 250 + 1):
+for epoch in range(1, 100 + 1):
     for step in range(1, num_steps + 1):
         _, batch_loss = gan.sess.run(
             [gan.pretrain_recon, gan.r_t_loss],
