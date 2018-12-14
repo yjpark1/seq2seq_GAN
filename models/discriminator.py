@@ -6,6 +6,7 @@ output: real/fake logit
 ## A RNN discriminator model for text classification
 import math
 import tensorflow as tf
+import tensorflow.keras.backend as K
 
 
 class RNNDiscriminator:
@@ -22,7 +23,8 @@ class RNNDiscriminator:
         # embedding layer is firstly defined in generator
         with tf.variable_scope('', reuse=True):
             embedding_kernel = tf.get_variable('embedding')
-        embed_dense = lambda x: tf.matmul(x, embedding_kernel)
+        # embed_dense = lambda x: K.dot(x, embedding_kernel)
+        embed_dense = lambda x: tf.tensordot(x, embedding_kernel, axes = 1)
         inputs_embed = embed_dense(inputs_seq)
         # inputs_embdded = self.embeddings(inputs_seq)
 

@@ -44,7 +44,7 @@ class Seq2SeqGenerator:
             batch_size = tf.shape(model_inputs)[0]
             self.start_tokens = tf.one_hot(tf.fill([batch_size, ], self._tokenID_start),
                                            self.vocab_size)
-            embed_dense = lambda x: tf.matmul(x, embedding_kernel)
+            embed_dense = lambda x: tf.tensordot(x, embedding_kernel, axes = 1)
 
         with tf.variable_scope(self.namescope, reuse=reuse):
             # seq2seq encoder & decoder

@@ -30,7 +30,7 @@ class Seq2SeqReconstructor:
                     reuse=False):
         with tf.variable_scope('', reuse=True):
             embedding_kernel = tf.get_variable('embedding')
-        embed_dense = lambda x: tf.matmul(x, embedding_kernel)
+        embed_dense = lambda x: tf.tensordot(x, embedding_kernel, axes = 1)
         embed = embed_dense(model_inputs)
         target_inputs_emb = tf.nn.embedding_lookup(embedding_kernel, target_inputs)
         # embed = self.embeddings(model_inputs)
