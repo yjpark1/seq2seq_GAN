@@ -39,15 +39,15 @@ class SeqGAN:
         lbl_summary = tf.data.Dataset().from_generator(gen_lbl_summary.gen_data,
                                                        output_types=tf.int64,
                                                        output_shapes=(
-                                                           tf.TensorShape([H.max_summary_len])))
+                                                           tf.TensorShape([H.max_summary_len + 1])))
 
         lbl_text = tf.data.Dataset().from_generator(gen_lbl_text.gen_data,
                                                     output_types=tf.int64,
-                                                    output_shapes=(tf.TensorShape([H.max_text_len])))
+                                                    output_shapes=(tf.TensorShape([H.max_text_len + 1])))
 
         ulbl_text = tf.data.Dataset().from_generator(gen_ulbl_text.gen_data,
                                                      output_types=tf.int64,
-                                                     output_shapes=(tf.TensorShape([H.max_text_len])))
+                                                     output_shapes=(tf.TensorShape([H.max_text_len + 1])))
 
         len_lbl_summary = tf.data.Dataset().from_generator(gen_lbl_summary.gen_len,
                                                            output_types=tf.int32,

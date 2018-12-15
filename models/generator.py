@@ -25,7 +25,7 @@ class Seq2SeqGenerator:
 
         self.max_output_length = H.max_summary_len
         self._tokenID_start = tokenizer.word_index['<start>']
-        self._tokenID_end = 0
+        self._tokenID_end = tf.zeros(1, tf.int32)
         self.namescope = 'generator'
 
     def build_model(self, model_inputs, len_model_inputs,
@@ -44,7 +44,7 @@ class Seq2SeqGenerator:
             batch_size = tf.shape(model_inputs)[0]
             self.start_tokens = tf.one_hot(tf.fill([batch_size, ], self._tokenID_start),
                                            self.vocab_size)
-            embed_dense = lambda x: tf.tensordot(x, embedding_kernel, axes = 1)
+            embed_dense = lambda x: tf.tensordot(x, embedding_kernel, axes=1)
 
         with tf.variable_scope(self.namescope, reuse=reuse):
             # seq2seq encoder & decoder
@@ -110,7 +110,7 @@ class Seq2SeqGenerator:
                                                         swap_memory=True,
                                                         maximum_iterations=self.max_output_length,
                                                         output_time_major=False,
-                                                        impute_finished=True)
+                                                        impute_finished=False)
         return outputs
 
 

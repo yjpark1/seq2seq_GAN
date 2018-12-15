@@ -76,23 +76,23 @@ class CustomGreedyEmbeddingHelper(Helper):
         if not isinstance(outputs, ops.Tensor):
             raise TypeError("Expected outputs to be a single Tensor, got: %s" %
                             type(outputs))
-        sample_ids = math_ops.argmax(outputs, axis=-1, output_type=dtypes.int32)
+        # sample_ids = math_ops.argmax(outputs, axis=-1, output_type=dtypes.int32)
+        dist = tfp.distributions.RelaxedOneHotCategorical(temperature=self.temp, logits=outputs)
+        sample_ids = dist.sample()
         return sample_ids
 
     def next_inputs(self, time, outputs, state, sample_ids, name=None):
         """next_inputs_fn for GreedyEmbeddingHelper."""
-        del time  # unused by next_inputs_fn
+        del time, outputs  # unused by next_inputs_fn
         # gumbel trick
         # http://anotherdatum.com/gumbel-gan.html
-        dist = tfp.distributions.RelaxedOneHotCategorical(temperature=self.temp, logits=outputs)
-        outputs = dist.sample()
-
-        finished = math_ops.equal(sample_ids, self._end_token)
+        finished = math_ops.equal(math_ops.argmax(sample_ids, axis=-1,
+                                  output_type=dtypes.int32), self._end_token)
         all_finished = math_ops.reduce_all(finished)
         next_inputs = control_flow_ops.cond(
             all_finished,
             # If we're finished, the next_inputs value doesn't matter
             lambda: self._start_inputs,
-            lambda: self._embedding_fn(outputs))
+            lambda: self._embedding_fn(sample_ids))
         return finished, next_inputs, state
 

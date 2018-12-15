@@ -65,7 +65,7 @@ docs = TextWithSummary_summary + TextWithSummary_text + TextWithoutSummary_text 
 docs = [x.split(' ') for x in docs]
 
 tokenizer = text.Tokenizer(num_words=H.vocab_size - 1,
-                           filters='!"#$%&()*+,-./:;=?@[\]^_`{|}~',
+                           filters='!"#$%&()*+,-./:;=?@[]^_`{|}~',
                            oov_token='<UNK>')
 tokenizer.fit_on_texts(docs)
 tokenizer.index_word[0] = '<end>'
@@ -123,7 +123,7 @@ for epoch in range(1, 100 + 1):
     for step in range(1, num_steps + 1):
         _, batch_loss = gan.sess.run(
             [gan.pretrain_recon, gan.r_t_loss],
-            feed_dict={gumbel_temp: max(1 * 0.95 ** epoch, 1e-3)}
+            feed_dict={gumbel_temp: max(1 * 0.8 ** epoch, 1e-3)}
         )
         print('epoch: {}, step: {}, G: {:.3f}'.format(epoch, step, batch_loss))
 
@@ -139,7 +139,7 @@ for epoch in range(1, num_epoch + 1):
         _, batch_g_loss, batch_d_loss, batch_r_loss, bch_indvL_D, bch_indvL_G, bch_indvL_R = gan.sess.run(
             [gan.train_op, gan.gen_loss, gan.dis_loss, gan.rec_loss] +\
             [indvL_D, indvL_G, indvL_R],
-            feed_dict={gumbel_temp: max(10 * 0.95 ** epoch, 1e-3)}
+            feed_dict={gumbel_temp: 1e-2}
         )
 
         print('★epoch: {}, step: {}, D: {:.3f}, G: {:.3f}, R: {:.3f}'.format(epoch, step, batch_d_loss,
