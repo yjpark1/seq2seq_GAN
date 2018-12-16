@@ -185,19 +185,13 @@ for epoch in range(1, num_epoch + 1):
         sequence = test_out[0]
         origin = test_out[1]
         # shape = (batch, num_samples, summary_length, vocab_size)
-        sequence = np.argmax(sequence, axis=2)
-        # shape = (batch, summary_lenth)
-        sequence = tokenizer.sequences_to_texts(sequence)
-        for s in sequence:
-            print(s, end='\n\n')
-
-        origin = np.argmax(origin, axis=2)
-        origin = tokenizer.sequences_to_texts(origin)
-
         f = open("summary_history/fake_summary_{}.txt".format(epoch), 'w')
-        for fake_summary in sequence:
-            fake_summary = fake_summary + '\n\n'
-            f.write(fake_summary)
+        for s in sequence:
+            s = np.argmax(s, axis=-1)
+            # shape = (batch, summary_lenth)
+            s = tokenizer.sequences_to_texts(s)
+            print(s, end='\n\n')
+            f.write(fake_summary + '\n\n')
 
         f.write('<origin>\n\n\n')
         for txt in origin:
