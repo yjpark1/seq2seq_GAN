@@ -164,10 +164,10 @@ class SeqGAN:
         r_t_loss = tf.contrib.seq2seq.sequence_loss(r_target_logits, labeled_text_do, weight_l_txt)
 
         r_r_loss = tf.clip_by_value(r_r_loss, 0, 20)
-        r_f_loss = tf.clip_by_value(r_f_loss, 0, 20)
+        self.r_f_loss = tf.clip_by_value(r_f_loss, 0, 20)
         self.r_t_loss = tf.clip_by_value(r_t_loss, 0, 20)
 
-        rec_loss = r_r_loss + r_f_loss + self.r_t_loss
+        rec_loss = r_r_loss + self.r_f_loss + self.r_t_loss
 
         # loss: generator
         # from target summary
@@ -176,7 +176,7 @@ class SeqGAN:
         self.g_r_loss = tf.clip_by_value(g_r_loss, 0, 20)
         # from discriminator
         g_d_loss = -tf.reduce_mean(tf.log(tf.clip_by_value(d_fake_preds, 1e-7, 1. - 1e-7)))  # g_preds -> 0.
-        gen_loss = 10 * self.g_r_loss + 5 * r_f_loss + g_d_loss
+        gen_loss = self.g_r_loss + r_f_loss + g_d_loss
         
         self.dis_loss = dis_loss
         self.gen_loss = gen_loss
@@ -188,8 +188,13 @@ class SeqGAN:
         self.gen_op = self.train_operator(loss_scope='loss/generator', loss=gen_loss, weights=self.g_weights)
 
         # pretraining operator
-        self.pretrain_gen = self.train_operator(loss_scope='loss/pretrain_generator', loss=self.g_r_loss, weights=self.g_weights)
-        self.pretrain_recon = self.train_operator(loss_scope='loss/pretrain_reconstructor', loss=self.r_t_loss, weights=self.r_weights)
+        self.pretrain_gen = self.train_operator(loss_scope='loss/pretrain_generator',
+                                                loss=self.g_r_loss, weights=self.g_weights)
+        self.pretrain_recon = self.train_operator(loss_scope='loss/pretrain_reconstructor',
+                                                  loss=self.rec_loss, weights=self.r_weights)
+        self.pretrain_auto = self.train_operator(loss_scope='loss/pretrain_autoencoder',
+                                                 loss=self.g_r_loss + self.rec_loss,
+                                                 weights=self.r_weights + self.g_weights)
 
         # define train operator
         self.train_op = tf.group(self.gen_op, self.dis_op, self.rec_op)

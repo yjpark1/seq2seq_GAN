@@ -6,3 +6,4 @@ rnn_units = 128
 batch_size = 8
 max_summary_len = 150
 max_text_len = 500
+pretrain = False
