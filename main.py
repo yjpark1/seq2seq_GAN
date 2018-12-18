@@ -104,11 +104,12 @@ gan.sess.run(tf.global_variables_initializer())
 
 print('start training GAN model')
 losses = {"d": [], "g": [], "r": []}
-num_steps = int(np.ceil(len(TextWithSummary_summary) / H.batch_size))
-print(num_steps)
 
 if H.pretrain:
     # train generator
+    num_steps = int(np.ceil(len(TextWithSummary_summary) / 16))
+    print(num_steps)
+
     gan.sess.run(iterator.initializer)
     for epoch in range(1, 50 + 1):
         for step in range(1, num_steps + 1):
@@ -117,17 +118,18 @@ if H.pretrain:
                 feed_dict={gumbel_temp: max(1 * 0.8 ** epoch, 1e-3)}
             )
             print('epoch: {}, step: {}, G: {:.3f}'.format(epoch, step, batch_loss))
+    ckpt_path = gan.saver.save(gan.sess, "saved/pretrain", 0)
 
     # train reconstructor
     gan.sess.run(iterator.initializer)
     for epoch in range(1, 50 + 1):
         for step in range(1, num_steps + 1):
             _, batch_loss = gan.sess.run(
-                [gan.pretrain_recon, gan.rec_loss],
+                [gan.pretrain_recon, gan.r_t_loss],
                 feed_dict={gumbel_temp: max(1 * 0.8 ** epoch, 1e-3)}
             )
             print('epoch: {}, step: {}, R: {:.3f}'.format(epoch, step, batch_loss))
-
+    ckpt_path = gan.saver.save(gan.sess, "saved/pretrain", 1)
     # train autoencoder
     gan.sess.run(iterator.initializer)
     for epoch in range(1, 50 + 1):
@@ -137,12 +139,13 @@ if H.pretrain:
                 feed_dict={gumbel_temp: max(1 * 0.8 ** epoch, 1e-3)}
             )
             print('epoch: {}, step: {}, R: {:.3f}'.format(epoch, step, batch_loss))
-
-    ckpt_path = gan.saver.save(gan.sess, "saved/pretrain", 0)
+    ckpt_path = gan.saver.save(gan.sess, "saved/pretrain", 2)
 
 # load pretrained model
-gan.saver.restore(gan.sess, "saved/pretrain-0")
+gan.saver.restore(gan.sess, "saved/pretrain-2")
 
+num_steps = int(np.ceil(len(TextWithSummary_summary) / H.batch_size))
+print(num_steps)
 # train gan
 gan.sess.run(iterator.initializer)
 for epoch in range(1, num_epoch + 1):

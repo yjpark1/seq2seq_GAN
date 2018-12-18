@@ -191,7 +191,7 @@ class SeqGAN:
         self.pretrain_gen = self.train_operator(loss_scope='loss/pretrain_generator',
                                                 loss=self.g_r_loss, weights=self.g_weights)
         self.pretrain_recon = self.train_operator(loss_scope='loss/pretrain_reconstructor',
-                                                  loss=self.rec_loss, weights=self.r_weights)
+                                                  loss=self.r_t_loss, weights=self.r_weights)
         self.pretrain_auto = self.train_operator(loss_scope='loss/pretrain_autoencoder',
                                                  loss=self.g_r_loss + self.rec_loss,
                                                  weights=self.r_weights + self.g_weights)
